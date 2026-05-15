@@ -1,0 +1,9 @@
+numpy>=1.26
+scipy>=1.16
+networkx>=3.0
+pandas>=2.0
+torch>=2.0
+torch_geometric>=2.6
+pytest>=7.0
+matplotlib>=3.7
+seaborn>=0.12
