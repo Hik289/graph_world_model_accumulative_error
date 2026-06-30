@@ -1,21 +1,48 @@
-# Graph World Model Accumulative Error (gwmerror)
+<div align="center">
 
-Official code release for the NeurIPS 2026 paper:
+# Understanding Rollout Error in Graph World Models
 
-> **"Topology-Aware Growth-Rate Prediction and Spectral-Regularization Stability for Graph World Model Rollouts"**
+**Xinyuan Song, Zekun Cai**
+
+[![arXiv](https://img.shields.io/badge/arXiv-2606.27780-b31b1b.svg)](https://arxiv.org/abs/2606.27780)
+[![Paper](https://img.shields.io/badge/Paper-PDF-blue.svg)](https://arxiv.org/pdf/2606.27780)
+[![Code](https://img.shields.io/badge/GitHub-Code-black.svg)](https://github.com/Hik289/graph_world_model_accumulative_error)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+**Official implementation for "Understanding Rollout Error in Graph World Models."**
+
+</div>
 
 ---
 
 ## Overview
 
+World models are often used for planning by rolling learned dynamics forward.
+Many planning environments, however, are graphs of agents, tools, skills,
+routes, and dependencies rather than vectors or images. In these settings, a
+local prediction error may stay local, spread through topology, or amplify when
+the edges themselves are predicted during rollout.
+
+This repository provides the benchmark suite, models, metrics, and experiment
+scripts for studying **long-horizon rollout error in Graph World Models (GWMs)**.
+The paper develops graph-valued rollout bounds that separate topology-induced
+amplification from model-induced amplification, introduces a joint node-edge
+operator for dynamic-edge rollouts, and proposes **Error-Aware GWM**, which
+combines spectral regularization, rollout consistency, and critical-node
+weighting.
+
 ![Framework Overview](figures/fig_main.png)
 
-This repository provides the full benchmark suite for studying **accumulative error in Graph World Models (GWMs)**. A GWM autoregressively predicts a graph-structured environment $G_t = (V, E_t, X_t, A_t)$ and rolls out future states for multi-step planning. Small prediction errors in node features or edges compound over rollout horizons, producing **planning regret** — yet this problem is entirely unstudied in the graph-structured case.
+---
 
-We introduce:
-- A **2×2 joint node-edge error propagation operator B** whose spectral radius ρ(B) governs geometric error growth
-- The **Graph Error Amplification Factor (GEAF)** = ρ(A)·∏‖W_ℓ‖₂ as a topology-aware upper bound on ρ(B)
-- A **Regime-Conditional Framework**: Fixed-Edge (FE) regime collapses B to block-diagonal; Dynamic-Edge (DE) regime activates full cross-coupling
+## Highlights
+
+| Question | Takeaway |
+|----------|----------|
+| How does graph topology affect rollout error? | Error growth depends on topology, horizon, and learned dynamics, not just one-step prediction loss. |
+| What changes when edges are predicted? | Dynamic-edge rollouts activate node-edge cross-coupling and can amplify error far beyond fixed-edge rollouts. |
+| Can a model remain stable over long horizons? | Error-Aware GWM reduces long-horizon divergence while preserving prediction accuracy. |
+| Where are GWMs most useful? | GWMs are strongest for dynamic graph rollout and agent planning; specialized graph models remain strong on static or sparse prediction tasks. |
 
 ---
 
@@ -23,93 +50,158 @@ We introduce:
 
 ![Rollout Pipeline](figures/fig_pipeline.png)
 
-The pipeline contrasts two regimes:
-- **Fixed-Edge (FE)**: edges are fixed during rollout; B = [[L_X, 0], [0, 0]], ρ(B) ≡ L_X = 2–50
-- **Dynamic-Edge (DE)**: edges are also predicted at each step; B is fully coupled, ρ(B) = 132–368 (5–10× higher)
+The code supports both rollout regimes studied in the paper:
+
+| Regime | Description |
+|--------|-------------|
+| **Fixed-Edge (FE)** | Node states evolve while graph structure is fixed. |
+| **Dynamic-Edge (DE)** | Both node states and edges are predicted at each step. |
+
+Dynamic-edge rollouts use a joint node-edge operator to capture cross-coupled
+error propagation. The experiments compare FE-trained and DE-trained models,
+measure rollout error and planning regret across horizons, and test whether
+Error-Aware GWM stabilizes long-horizon prediction.
 
 ---
 
-## Key Results
+## Repository Contents
 
-| Claim | Result |
-|---|---|
-| **H4** Planning regret super-linear in horizon | Median Regret@32/Regret@1 ≥ 4.4× (all 7 topologies, strict pass) |
-| **H6** DE-trained beats FE-trained on DE envs | Geomean 11× (Cohen d_z=5.08, p=1.5e-11, n=36 paired) |
-| **H7 E1** Cross-coupling activated in DE regime | ρ(B) > max(L_X, M_A) in 108/108 cells, mean excess ≈155 |
-| **H5 partial** B6 unique stability+accuracy | 0/21 diverged + NodeMSE@32 1690× lower than closest B2 variant |
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| Graph generators | `src/graph_generators/` | Synthetic topology generation and graph statistics. |
+| Simulators | `src/simulators/` | Dynamic graph, agent calling tree, and platform skill graph simulators. |
+| Baselines | `src/baselines/` | MLP, GCN, MPNN, GPS, action-node, and Error-Aware GWM variants. |
+| Metrics | `src/metrics/` | NodeMSE, EdgeF1, GEAF, rollout error, regret, and correlation utilities. |
+| Scripts | `scripts/` | Dataset generation, baseline training, ablations, dynamic-edge runs, and figures. |
+| Figures | `figures/` | Main paper diagrams used in this README. |
+| Tests | `tests/` | Pytest checks for generators, simulators, metrics, and B6 patches. |
 
 ---
 
 ## Installation
 
 ```bash
+git clone git@github.com:Hik289/graph_world_model_accumulative_error.git
+cd graph_world_model_accumulative_error
+
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Python**: 3.11+ recommended. **CUDA**: 11.8+ for GPU training.
+Python 3.11+ is recommended. CUDA is optional for small tests, but GPU training
+is recommended for the full benchmark suite.
 
-## Quick Start
+---
+
+## Quickstart
+
+Generate the synthetic graph datasets:
 
 ```bash
-# Step 1: Generate synthetic graph data (7 topologies + agent/skill simulators)
 python scripts/p2_generate_all.py --out_dir ./data
+```
 
-# Step 2: Train all baselines — Fixed-Edge (FE) mode
-python scripts/p2_run_all_baselines.py --data_root ./data --out_dir ./results
+Train fixed-edge baselines:
 
-# Step 3: Train Dynamic-Edge (DE) baselines (adds edge-prediction head)
-python scripts/streamA_de_trained.py --data_root ./data --out_dir ./results/de_trained
+```bash
+python scripts/p2_run_all_baselines.py \
+    --data_root ./data \
+    --out_dir ./results
+```
 
-# Step 4: Run error injection + ablation experiments (Exp 3–13, 17–23)
-python scripts/p4_batch.py --data_root ./data --p2_dir ./results/p2_baselines --out_dir ./results/p4
+Train dynamic-edge baselines:
 
-# Step 5: Run correction, rewiring, agent workflow experiments (Exp 10–11, 14–16, 25)
-python scripts/p5_p6_batch.py --data_root ./data --p2_dir ./results/p2_baselines --out_dir ./results/p5
+```bash
+python scripts/streamA_de_trained.py \
+    --data_root ./data \
+    --out_dir ./results/de_trained
+```
 
-# Step 6: Generate figures
+Run error injection and rollout ablations:
+
+```bash
+python scripts/p4_batch.py \
+    --data_root ./data \
+    --p2_dir ./results/p2_baselines \
+    --out_dir ./results/p4
+```
+
+Run correction, rewiring, and agent workflow experiments:
+
+```bash
+python scripts/p5_p6_batch.py \
+    --data_root ./data \
+    --p2_dir ./results/p2_baselines \
+    --out_dir ./results/p5
+```
+
+Generate figures:
+
+```bash
 python scripts/gen_p2_figures.py --out_dir ./results/figures
 ```
 
-## Repository Structure
-
-```
-gwmerror/
-├── figures/                   ← Paper figures (main + pipeline)
-├── src/
-│   ├── graph_generators/      # 7 topology generators (chain/tree/grid/SW/SF/star/complete)
-│   ├── simulators/            # Dynamic graph, agent calling tree, platform skill graph
-│   ├── metrics/               # NodeMSE, EdgeF1, GEAF, ReturnError, Regret, FPD, ...
-│   └── baselines/             # B1–B6 world model implementations + DE edge head
-├── scripts/                   # Training, evaluation, and figure generation scripts
-├── tests/                     # Unit tests (pytest)
-└── requirements.txt
-```
+---
 
 ## Experiments
 
-All 25 experiments from the paper are reproducible:
+| Phase | Focus | Script |
+|-------|-------|--------|
+| P2 | Baseline training across graph topologies and seeds | `scripts/p2_run_all_baselines.py` |
+| P3 | Rollout error versus topology, horizon, and scaling | `scripts/p4_batch.py` |
+| P4 | Node, edge, bridge, and hub error injection | `scripts/p4_batch.py` |
+| P5 | Correction, rewiring, and scheduled-sampling variants | `scripts/p5_p6_batch.py` |
+| P6 | Agent calling tree and platform skill graph testbeds | `scripts/p5_p6_batch.py` |
+| DE | Dynamic-edge training and node-edge coupling analysis | `scripts/streamA_de_trained.py` |
 
-| Phase | Experiments | Script |
-|---|---|---|
-| P2 | Baseline training (6 models × 7 topos × 3 seeds) | `p2_run_all_baselines.py` |
-| P3 | Rollout error vs topology, horizon, scaling | `p4_batch.py` |
-| P4 | Error injection (node/edge/position) | `p4_batch.py` |
-| P5 | Correction, rewiring, scheduled sampling | `p5_p6_batch.py` |
-| P6 | Agent calling tree, platform skill graph | `p5_p6_batch.py` |
-| DE | Dynamic-edge training (H6/H7) | `streamA_de_trained.py` |
+Run the test suite after installation:
+
+```bash
+pytest
+```
+
+---
+
+## Directory Structure
+
+```text
+graph_world_model_accumulative_error/
+|-- README.md
+|-- LICENSE
+|-- requirements.txt
+|-- figures/
+|   |-- fig_main.png
+|   `-- fig_pipeline.png
+|-- scripts/
+|-- tests/
+`-- src/
+    |-- baselines/
+    |-- graph_generators/
+    |-- metrics/
+    |-- simulators/
+    `-- utils/
+```
+
+---
 
 ## Citation
 
+If you use this code, please cite the paper:
+
 ```bibtex
-@inproceedings{gwmerror2026,
-  title     = {Topology-Aware Growth-Rate Prediction and Spectral-Regularization Stability
-               for Graph World Model Rollouts},
-  author    = {Anonymous Authors},
-  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
-  year      = {2026}
+@misc{song2026understandingrollouterrorgraph,
+  title         = {Understanding Rollout Error in Graph World Models},
+  author        = {Xinyuan Song and Zekun Cai},
+  year          = {2026},
+  eprint        = {2606.27780},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.AI},
+  url           = {https://arxiv.org/abs/2606.27780}
 }
 ```
 
 ## License
 
-MIT License. See LICENSE.
+Released under the [MIT License](LICENSE). Third-party datasets, libraries, and
+models used by the experiments are governed by their own licenses and terms.
