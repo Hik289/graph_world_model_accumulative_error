@@ -5,8 +5,8 @@
 **Xinyuan Song, Zekun Cai**
 
 [![arXiv](https://img.shields.io/badge/arXiv-2606.27780-b31b1b.svg)](https://arxiv.org/abs/2606.27780)
-[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](requirements.txt)
 
 **Official implementation for "Understanding Rollout Error in Graph World Models."**
 
