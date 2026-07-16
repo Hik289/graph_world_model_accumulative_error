@@ -14,6 +14,12 @@
 
 ---
 
+## At a Glance
+
+- **Research question.** How does rollout error accumulate in graph-valued world models over long horizons?
+- **Core idea.** The benchmark separates topology-induced error, dynamic-edge error, and multi-step rollout amplification.
+- **What is included.** Synthetic graph datasets, baseline models, rollout metrics, ablations, dynamic-edge studies, and figure scripts.
+
 ## Overview
 
 World models are often used for planning by rolling learned dynamics forward.
@@ -34,7 +40,7 @@ weighting.
 
 ---
 
-## Highlights
+## Key Contributions
 
 | Question | Takeaway |
 |----------|----------|
@@ -63,7 +69,7 @@ Error-Aware GWM stabilizes long-horizon prediction.
 
 ---
 
-## Repository Contents
+## Repository Structure
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
@@ -93,7 +99,7 @@ is recommended for the full benchmark suite.
 
 ---
 
-## Quickstart
+## Quick Start
 
 Generate the synthetic graph datasets:
 
@@ -162,7 +168,7 @@ pytest
 
 ---
 
-## Directory Structure
+## Directory Tree
 
 ```text
 graph_world_model_accumulative_error/
