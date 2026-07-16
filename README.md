@@ -1,16 +1,18 @@
-<div align="center">
+<h1 align="center">Understanding Rollout Error in Graph World Models</h1>
 
-# Understanding Rollout Error in Graph World Models
+<p align="center">
+  <strong>Xinyuan Song, Zekun Cai</strong>
+</p>
 
-**Xinyuan Song, Zekun Cai**
+<p align="center">
+  <a href="https://arxiv.org/abs/2606.27780"><img src="https://img.shields.io/badge/arXiv-2606.27780-b31b1b.svg" alt="arXiv"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT license"></a>
+  <a href="requirements.txt"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB.svg" alt="Python 3.11+"></a>
+</p>
 
-[![arXiv](https://img.shields.io/badge/arXiv-2606.27780-b31b1b.svg)](https://arxiv.org/abs/2606.27780)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg)](requirements.txt)
-
-**Official implementation for "Understanding Rollout Error in Graph World Models."**
-
-</div>
+<p align="center">
+  <strong>Official implementation for "Understanding Rollout Error in Graph World Models."</strong>
+</p>
 
 ---
 
