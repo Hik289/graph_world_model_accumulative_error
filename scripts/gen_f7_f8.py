@@ -207,7 +207,7 @@ cap8 = (
     r"R-GCN mean $sr_{\rm sink}$ = " + f"{df14.rgcn_sr_at_sink_T.mean():.3f}" +
     r" vs GT = " + f"{df14.true_sr_at_sink_T.mean():.3f}" +
     r" (Pearson $r=" + f"{r14:.3f}" + r"$, MAE=" + f"{mae14:.3f}" + r"). "
-    r"\textbf{Right} --- Exp~25 OpenClaw skill\_graph: "
+    r"\textbf{Right} --- Exp~25 platform skill\_graph: "
     r"R-GCN mean $sr_{\rm skill}$ = " + f"{df25.rgcn_skill_sr_T.mean():.3f}" +
     r" vs GT = " + f"{df25.true_skill_sr_T.mean():.3f}" +
     r" (Pearson $r=" + f"{r25:.3f}" + r"$, MAE=" + f"{mae25:.3f}" + r"). "

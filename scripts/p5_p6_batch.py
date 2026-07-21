@@ -14,7 +14,7 @@ P6:
 - Exp 14: multi-agent calling-tree H5 final (use B6 patched ckpts)
 - Exp 15: agent workflow failure propagation (offline injection on agent_calling_tree)
 - Exp 16: critical node correction in agent workflows (correction policies on agent system)
-- Exp 25: OpenClaw skill graph maintenance
+- Exp 25: platform skill graph maintenance
 
 Exp 24 ext: 3 memory variants (recurrent / transformer / retrieval). Architecture changes: each variant is a small wrapper around B3_MPNN that pre-aggregates input across history window.
 
@@ -665,7 +665,7 @@ def exp16_agent_correction(data_root, out_dir, dev):
 # ---------------------------------------------------------------------------
 
 def exp25_skill_graph(data_root, out_dir, dev):
-    print(f"[Exp 25] OpenClaw skill graph maintenance")
+    print(f"[Exp 25] platform skill graph maintenance")
     t0 = time.time()
     out_path = os.path.join(out_dir, "exp25_skill_graph.csv")
     if skip_if_done(out_path):

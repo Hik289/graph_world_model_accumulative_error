@@ -1,7 +1,7 @@
 <h1 align="center">Understanding Rollout Error in Graph World Models</h1>
 
 <p align="center">
-  <strong>Xinyuan Song, Zekun Cai</strong>
+  <strong>Anonymous Authors</strong>
 </p>
 
 <p align="center">
@@ -210,7 +210,7 @@ If you use this code, please cite the paper:
 ```bibtex
 @misc{song2026understandingrollouterrorgraph,
   title         = {Understanding Rollout Error in Graph World Models},
-  author        = {Xinyuan Song and Zekun Cai},
+  author        = {Anonymous Authors},
   year          = {2026},
   eprint        = {2606.27780},
   archivePrefix = {arXiv},

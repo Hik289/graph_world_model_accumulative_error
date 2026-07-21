@@ -1,4 +1,4 @@
-"""OpenClaw skill-graph simulator.
+"""Platform skill-graph simulator.
 
 实现 ``data/specs/platform_skill_graph.md``: 8 类节点 × 8 类边 × 8 维特征 +
 动作集 + failure propagation + repair + oracle.
