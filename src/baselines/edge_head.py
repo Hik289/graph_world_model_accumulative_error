@@ -1,10 +1,10 @@
-"""Edge-prediction head wrapper for DE-trained baselines.
+r"""Edge-prediction head wrapper for DE-trained baselines.
 
-Per Director directive 2026-05-14 21:02 UTC (Stream A):
+Design notes, 2026-05-14 21:02 UTC:
 - 加 independent Bernoulli sigmoid output for $\hat A_{t+1}$
 - Loss: L_total = L_X (node MSE) + λ_e * BCE(Â, A_true)
 - theory_constants must include L_g (edge-prediction Lipschitz) > 0
-  enabling T2 super-additivity in M_X > 0 regime (theorist §3.4)
+  enabling T2 super-additivity in M_X > 0 regime (analysis note §3.4)
 
 Implementation: separate edge_proj head computes pairwise features → sigmoid logits for adjacency.
 """
