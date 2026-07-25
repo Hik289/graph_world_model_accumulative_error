@@ -1,7 +1,7 @@
 """Exp 21: Scaling N ∈ {20, 50, 100, 200, 500}.
 
-按 p3_p6_experiment_dataset_matrix.md §2 + baseline_dataset_matrix.md:
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+Configuration follows p3_p6_experiment_dataset_matrix.md §2 and
+baseline_dataset_matrix.md.
 - 5 baselines (B2/B3/B4/B5/B6); B1 MLP-WM 仅 N≤50 (per spec)
 - 5 拓扑 (chain, tree, grid, small_world, scale_free); star/complete @ N≥200 drop
 - 5 N values, 3 seeds
@@ -22,12 +22,11 @@ Total = 105 + 75 + 45 + 45 = 270 jobs
   N=500: 5 baseline × 3 topo × 3 = 45
 Total NEW = 240 jobs
 
-⚠️ 需先生成 FE rollouts for N ∈ {20, 100, 200, 500} (P2 仅 N=50).
+FE rollouts for N ∈ {20, 100, 200, 500} must be generated first.
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import multiprocessing as mp
 import os
@@ -35,7 +34,6 @@ import queue as queue_mod
 import sys
 import time
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -159,9 +157,9 @@ def worker_fn(gpu_id: int, job_q: "mp.Queue", res_q: "mp.Queue",
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_root", default="PROJECT_ROOT/data")
-    parser.add_argument("--out_dir", default="PROJECT_ROOT/results/exp21_scaling")
-    parser.add_argument("--log_path", default="PROJECT_ROOT/logs/exp21.log")
+    parser.add_argument("--data_root", default=os.path.join(REPO_ROOT, "data"))
+    parser.add_argument("--out_dir", default=os.path.join(REPO_ROOT, "results", "exp21_scaling"))
+    parser.add_argument("--log_path", default=os.path.join(REPO_ROOT, "logs", "exp21.log"))
     parser.add_argument("--gpu_ids", nargs="+", type=int, default=[0, 1, 2])
     parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--skip_data_gen", action="store_true")

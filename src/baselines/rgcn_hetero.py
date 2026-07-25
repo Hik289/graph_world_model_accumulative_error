@@ -64,7 +64,7 @@ class RGCNHetero(nn.Module):
 
         Returns X_{t+1}: (B, N, D).
 
-        ⚠️ Per data_scientist Q2 decision (2026-05-13 06:43 UTC) + Director 13:25 UTC:
+        Output constraints:
         - dim 0 (success_prob) ∈ [0,1]: sigmoid head
         - dim 5 (error_flag) ∈ {0,1}: sigmoid then 0/1 binarization done in eval (not training)
         - dims 1-4, 6-7 (continuous): tanh-style residual (free range)
@@ -98,7 +98,7 @@ class RGCNHetero(nn.Module):
         # Output projection
         delta = self.out_proj(h)  # (B, N, D)
         X_next = X_t + delta
-        # ⚠️ Issue 1 fix: clip sr (dim 0) and error_flag (dim 5) to [0,1] via sigmoid
+        # Constrain success probability and error flag to [0, 1].
         # Use sigmoid on the predicted sr / error_flag absolute values, not residuals,
         # to keep them in valid Bernoulli-parameter range.
         # We sigmoid the FULL X_next[:,:,[0,5]] (model's prediction of probability).

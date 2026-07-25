@@ -1,7 +1,6 @@
-"""Stream C: H3 OOD retest per Amendment §A4.
+"""Stream C: H3 out-of-distribution retest from Amendment §A4.
 
-Spec (Director 21:13 UTC, A4 21:03 UTC):
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+Experiment specification:
 - Train set: chain ∪ tree (use P2 chain checkpoints as conservative proxy)
 - Test set: scale_free (OOD)
 - Inject 6 positions × δ ∈ {0.1, 0.5, 1.0, 2.0} × H ∈ {1,2,4,8,16,20,32}
@@ -13,13 +12,11 @@ Output: results/h3_ood_amplitude_sweep.csv
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import os
 import sys
 import time
-from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 import numpy as np
 import torch
@@ -29,7 +26,8 @@ sys.path.insert(0, REPO_ROOT)
 
 from src.baselines import BASELINE_REGISTRY
 from src.graph_generators import generate
-from scripts._runner_utils import skip_if_done, now_jst
+from src.utils.seeding import stable_seed
+from scripts._runner_utils import now_jst
 
 CEIL = 1e10
 N = 50
@@ -102,9 +100,9 @@ def get_inject_node(g, position: str, rng: np.random.Generator) -> Optional[int]
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_root", default="PROJECT_ROOT/data")
-    parser.add_argument("--p2_dir", default="PROJECT_ROOT/results/p2_baselines")
-    parser.add_argument("--out_dir", default="PROJECT_ROOT/results/h3_ood_retest")
+    parser.add_argument("--data_root", default=os.path.join(REPO_ROOT, "data"))
+    parser.add_argument("--p2_dir", default=os.path.join(REPO_ROOT, "results", "p2_baselines"))
+    parser.add_argument("--out_dir", default=os.path.join(REPO_ROOT, "results", "h3_ood_retest"))
     parser.add_argument("--device", default="cuda:2")
     args = parser.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
@@ -146,7 +144,7 @@ def main():
 
             for position in POSITIONS:
                 rng = np.random.default_rng(
-                    seed=hash((baseline, seed, position, "h3_ood")) % (2 ** 31))
+                    seed=stable_seed(baseline, seed, position, "h3_ood"))
                 inj_node = get_inject_node(g_test, position, rng)
                 if inj_node is None:
                     continue

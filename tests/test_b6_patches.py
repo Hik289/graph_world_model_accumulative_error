@@ -1,4 +1,4 @@
-"""Unit tests for B6 patches (per ml_engineer_gpt audit 2026-05-13 06:38 UTC).
+"""Regression tests for the B6 error-aware components.
 
 Item 3 (Critical): R_critical implemented.
 Item 2: 4-iter power iteration + register_buffer warm-start.
@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import numpy as np
 import torch
-import pytest
 
 from src.baselines.b6_error_aware import ErrorAwareGWM
 
@@ -77,7 +76,6 @@ def test_spectral_reg_buffer_persists():
     """Item 2: register_buffer warm-start `_spec_u_{li}` 跨调用持久化."""
     m = ErrorAwareGWM(D=8, hidden=16, n_layers=2)
     # 调一次, buffer 应被更新
-    u_before = m._spec_u_0.clone()
     _ = m.spectral_reg(target_spec=1.0)
     u_after = m._spec_u_0.clone()
     # 不要求 bit-exact (因为 weight 随机), 但 norm 应保持 ~1

@@ -1,4 +1,4 @@
-"""B2 GCN ablation variants for B6 ablation comparison (reviewer_gemini v2).
+"""B2 GCN variants used in the B6 ablation comparison.
 
 Variants:
 - B2GCN_wd: B2 GCN backbone (regularization at optimizer side via Adam weight_decay)
@@ -7,9 +7,7 @@ Variants:
 """
 from __future__ import annotations
 
-import numpy as np
 import torch
-import torch.nn as nn
 
 from .b2_gcn import GCNWorldModel
 

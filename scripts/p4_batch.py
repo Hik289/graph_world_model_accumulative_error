@@ -1,7 +1,7 @@
 """P4 batch: Exp 3 + 5 + 6 + 9 + 12 + 13 + 20 + 4 (DE).
 
-Per data/p3_p6_experiment_dataset_matrix.md §2 + analysis/preregistration_amendments §A3:
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+Configuration follows data/p3_p6_experiment_dataset_matrix.md §2 and
+analysis/preregistration_amendments §A3.
 
 Critical binding directive (A3): Exp 5 MUST record NodeMSE@H for H ∈ {1, 2, 4, 8, 16, 32}
 per condition (clean / node-only / edge-only / node+edge).
@@ -24,11 +24,9 @@ import math
 import os
 import sys
 import time
-import multiprocessing as mp
-import queue as queue_mod
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import numpy as np
 import torch
@@ -37,14 +35,8 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 
 from src.baselines import BASELINE_REGISTRY
-from src.graph_generators import generate, compute_all
-from src.simulators import (
-    rollout, generate_calling_tree, simulate_calling_tree,
-)
-from src.metrics import (
-    RolloutPrediction, node_mse, return_error, geaf_global,
-    theory_constants, failure_propagation_depth,
-)
+from src.graph_generators import generate
+from src.utils.seeding import stable_seed
 
 JST = timezone(timedelta(hours=9))
 BASELINES = ["B1_MLP", "B2_GCN", "B3_MPNN", "B4_GPS", "B5_ActionNode", "B6_ErrorAware"]
@@ -127,7 +119,7 @@ def get_inject_node(g, position: str, rng: np.random.Generator) -> Optional[int]
 
 def exp3_node_injection(p2_dir: str, data_root: str, out_dir: str,
                         device: torch.device, H_eval: int = 20) -> Dict[str, Any]:
-    print(f"[Exp 3] node error injection")
+    print("[Exp 3] node error injection")
     t0 = time.time()
     rows = []
     for baseline in BASELINES:
@@ -138,11 +130,10 @@ def exp3_node_injection(p2_dir: str, data_root: str, out_dir: str,
                     continue
                 test_X, test_a = ctx["test_X"], ctx["test_a"]
                 A_norm_t = ctx["A_norm_t"]
-                A_dense = ctx["A_dense"]
                 T_traj = test_X.shape[1] - 1
                 H = min(H_eval, T_traj)
                 for pos in INJECTION_POSITIONS:
-                    rng = np.random.default_rng(seed=hash((baseline, topo, seed, pos)) % (2**31))
+                    rng = np.random.default_rng(seed=stable_seed(baseline, topo, seed, pos))
                     inj_node = get_inject_node(ctx["graph"], pos, rng)
                     if inj_node is None:
                         continue
@@ -192,8 +183,8 @@ def exp5_node_edge_ablation(p2_dir: str, data_root: str, out_dir: str,
     """A3 binding: collect NodeMSE@H for H ∈ {1, 2, 4, 8, 16, 32} per condition.
     Conditions: clean, node-only, edge-only, node+edge.
     """
-    print(f"[Exp 5] node/edge ablation (A3 multi-H binding)")
-    print(f"  ⚠️ Collecting H ∈ {EXP5_HORIZONS} per condition (A3 directive)")
+    print("[Exp 5] node/edge ablation (A3 multi-H binding)")
+    print(f"  Collecting H ∈ {EXP5_HORIZONS} per condition")
     t0 = time.time()
     rows = []
     conditions = ["clean", "node_only", "edge_only", "node_plus_edge"]
@@ -208,7 +199,7 @@ def exp5_node_edge_ablation(p2_dir: str, data_root: str, out_dir: str,
                 A_dense = ctx["A_dense"]
                 T_traj = test_X.shape[1] - 1
                 # Pre-select hub node + random edge for consistency across conditions
-                rng = np.random.default_rng(seed=hash((baseline, topo, seed, "exp5")) % (2**31))
+                rng = np.random.default_rng(seed=stable_seed(baseline, topo, seed, "exp5"))
                 hub = ctx["graph"].critical_roles.get("hub", [0])[0]
                 # Random edge: pick (i,j) with A[i,j] = 1
                 edge_candidates = np.argwhere(A_dense > 0)
@@ -266,7 +257,7 @@ def exp5_node_edge_ablation(p2_dir: str, data_root: str, out_dir: str,
     import pandas as pd
     pd.DataFrame(rows).to_csv(df_path, index=False)
     print(f"  Exp 5: {len(rows)} rows → {df_path} ({time.time()-t0:.1f}s)")
-    print(f"  ⚠️ verify: csv has columns NodeMSE@{{1,2,4,8,16,32}} ✓ ready for A3 slope test")
+    print("  CSV includes NodeMSE@{1,2,4,8,16,32} for the A3 slope test")
     return {"exp": 5, "n_rows": len(rows), "out": df_path, "horizons_collected": EXP5_HORIZONS}
 
 
@@ -275,7 +266,7 @@ def exp5_node_edge_ablation(p2_dir: str, data_root: str, out_dir: str,
 # ---------------------------------------------------------------------------
 
 def exp6_action_node(data_root: str, out_dir: str, device: torch.device, H: int = 20) -> Dict[str, Any]:
-    print(f"[Exp 6] action-node injection on agent_calling_tree")
+    print("[Exp 6] action-node injection on agent_calling_tree")
     t0 = time.time()
     rows = []
     # 使用 agent_calling_tree test 数据 (~100 instances)
@@ -331,7 +322,7 @@ def exp6_action_node(data_root: str, out_dir: str, device: torch.device, H: int 
 # ---------------------------------------------------------------------------
 
 def exp9_subgraph_mask(data_root: str, out_dir: str, device: torch.device) -> Dict[str, Any]:
-    print(f"[Exp 9] critical subgraph masking")
+    print("[Exp 9] critical subgraph masking")
     t0 = time.time()
     rows = []
     test_dir = os.path.join(data_root, "agent_calling_tree", "test")
@@ -388,7 +379,7 @@ def exp9_subgraph_mask(data_root: str, out_dir: str, device: torch.device) -> Di
 
 def exp13_sparse_dense_mp(p2_dir: str, data_root: str, out_dir: str,
                           device: torch.device) -> Dict[str, Any]:
-    print(f"[Exp 13] sparse vs dense MP comparison")
+    print("[Exp 13] sparse vs dense MP comparison")
     t0 = time.time()
     rows = []
     # B2 = local (GCN), B3 = MPNN (edge-conditioned), B4 = GPS (full attention)
@@ -430,7 +421,7 @@ def exp13_sparse_dense_mp(p2_dir: str, data_root: str, out_dir: str,
 
 def exp20_noisy_obs(p2_dir: str, data_root: str, out_dir: str,
                     device: torch.device, H: int = 20) -> Dict[str, Any]:
-    print(f"[Exp 20] robustness to noisy observation")
+    print("[Exp 20] robustness to noisy observation")
     t0 = time.time()
     rows = []
     noise_levels = [0.0, 0.001, 0.01, 0.05, 0.1, 0.2]
@@ -446,7 +437,7 @@ def exp20_noisy_obs(p2_dir: str, data_root: str, out_dir: str,
                 Hc = min(H, T_traj)
                 for sigma in noise_levels:
                     per_traj_mse = []
-                    rng = np.random.default_rng(seed=hash((baseline, topo, seed, sigma)) % (2**31))
+                    rng = np.random.default_rng(seed=stable_seed(baseline, topo, seed, sigma))
                     for i in range(test_X.shape[0]):
                         X_0_clean = test_X[i, 0]
                         # 加 observation noise to X_0
@@ -478,7 +469,7 @@ def exp20_noisy_obs(p2_dir: str, data_root: str, out_dir: str,
 
 def exp4_edge_de(p2_dir: str, data_root: str, out_dir: str,
                  device: torch.device, H: int = 20) -> Dict[str, Any]:
-    print(f"[Exp 4] edge perturbation on DE rollouts")
+    print("[Exp 4] edge perturbation on DE rollouts")
     t0 = time.time()
     rows = []
     de_topos = ["chain", "tree", "grid", "small_world", "scale_free", "star"]
@@ -515,7 +506,7 @@ def exp4_edge_de(p2_dir: str, data_root: str, out_dir: str,
                 T_traj = de_test_X.shape[1] - 1
                 Hc = min(H, T_traj)
                 for pert in edge_pert_types:
-                    rng = np.random.default_rng(seed=hash((baseline, topo, seed, pert)) % (2**31))
+                    rng = np.random.default_rng(seed=stable_seed(baseline, topo, seed, pert))
                     per_traj = []
                     for i in range(de_test_X.shape[0]):
                         X_0 = torch.from_numpy(de_test_X[i, 0]).float().unsqueeze(0).to(device)
@@ -576,7 +567,7 @@ def exp12_distribution_shift(p2_dir: str, data_root: str, out_dir: str,
                              device: torch.device, H: int = 20) -> Dict[str, Any]:
     """Test: load P2 trained model on topology A, evaluate on topology B.
     Cross-topology 5 splits per spec §3.1."""
-    print(f"[Exp 12] distribution shift")
+    print("[Exp 12] distribution shift")
     t0 = time.time()
     rows = []
     splits = [
@@ -643,9 +634,9 @@ def exp12_distribution_shift(p2_dir: str, data_root: str, out_dir: str,
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_root", default="PROJECT_ROOT/data")
-    parser.add_argument("--p2_dir", default="PROJECT_ROOT/results/p2_baselines")
-    parser.add_argument("--out_dir", default="PROJECT_ROOT/results/p4")
+    parser.add_argument("--data_root", default=os.path.join(REPO_ROOT, "data"))
+    parser.add_argument("--p2_dir", default=os.path.join(REPO_ROOT, "results", "p2_baselines"))
+    parser.add_argument("--out_dir", default=os.path.join(REPO_ROOT, "results", "p4"))
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--exps", nargs="+", default=["3", "5", "6", "9", "13", "20", "4", "12"])
     args = parser.parse_args()

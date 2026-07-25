@@ -23,7 +23,7 @@ BASELINE_REGISTRY = {
     "B4_GPS": GraphTransformerWorldModel,
     "B5_ActionNode": ActionNodeGWM,
     "B6_ErrorAware": ErrorAwareGWM,
-    # B6 ablation variants (per reviewer_gemini v2 / Director 22:33 UTC)
+    # B6 ablation variants.
     "B2_wd": B2GCN_wd,
     "B2_clip": B2GCN_clip,
     "B2_specproj": B2GCN_specproj,

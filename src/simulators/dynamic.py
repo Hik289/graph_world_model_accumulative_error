@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from ..graph_generators.base import GraphSample
+from ..utils.seeding import stable_seed
 
 
 # ---------------------------------------------------------------------------
@@ -179,14 +180,14 @@ def rollout(
     if env_seed is None:
         # backward-compatible: 用 (graph.topology, graph.N, graph.seed) 派生 env_seed,
         # 这样同 GraphSample 的 W/U/Q 在不同 inner seed 下保持 bit-exact (符合 spec §2.1).
-        env_seed = hash(("env", graph.topology, graph.N, graph.seed)) % (2 ** 31)
+        env_seed = stable_seed("env", graph.topology, graph.N, graph.seed)
     env_rng = np.random.default_rng(int(env_seed))
     seed_W_env = env_rng.integers(0, 2 ** 31 - 1)
     seed_U_env = env_rng.integers(0, 2 ** 31 - 1)
     seed_Q_env = env_rng.integers(0, 2 ** 31 - 1)
 
     # ---------------- inner seed (决定 X0/actions/noise) ----------------
-    base = hash(("rollout", graph.topology, graph.N, graph.seed, seed)) % (2 ** 31)
+    base = stable_seed("rollout", graph.topology, graph.N, graph.seed, seed)
     rng_main = np.random.default_rng(base)
     seed_X0 = rng_main.integers(0, 2 ** 31 - 1)
     seed_a = rng_main.integers(0, 2 ** 31 - 1)

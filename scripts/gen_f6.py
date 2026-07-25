@@ -1,6 +1,5 @@
-"""
-F6 — H7 Redemption Test + B5/B6 GEAF Spectral Comparison
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+"""F6 — H7 redemption test and B5/B6 GEAF spectral comparison.
+
 Two-panel design:
   Left:  NodeMSE@H pert_vs_clean vs H (log-log), 3 ε values, contractive decay
   Right: GEAF_hat per topology, B5 vs B6 grouped bars + floor annotation
@@ -23,9 +22,10 @@ import matplotlib.pyplot as plt
 warnings.filterwarnings("ignore")
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
-EXP18  = "PROJECT_ROOT/results/p5_exp18_full/exp18_multi_axis.csv"
-P2_RAW = "PROJECT_ROOT/results/p2_baselines_raw.csv"
-OUT    = "PROJECT_ROOT/results/figures/p2"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+EXP18 = os.path.join(REPO_ROOT, "results", "p5_exp18_full", "exp18_multi_axis.csv")
+P2_RAW = os.path.join(REPO_ROOT, "results", "p2_baselines_raw.csv")
+OUT = os.path.join(REPO_ROOT, "results", "figures", "p2")
 os.makedirs(OUT, exist_ok=True)
 
 # ─── Style ────────────────────────────────────────────────────────────────────

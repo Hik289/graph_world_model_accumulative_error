@@ -2,7 +2,6 @@
 """verify_manifest.py — round-trip sha256 check for gwmerror data subdirs.
 
 Usage:
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
     python scripts/verify_manifest.py <manifest_or_subdir> [...]
     python scripts/verify_manifest.py --all      # all 5 subdirs under data/
 
@@ -21,7 +20,8 @@ import time
 from pathlib import Path
 from typing import List, Tuple
 
-DATA_ROOT = "PROJECT_ROOT/data"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DATA_ROOT = REPO_ROOT / "data"
 SUBDIRS = [
     "synthetic_graphs",
     "synthetic_rollouts",

@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import scipy.sparse as sp
@@ -69,7 +69,6 @@ def geaf_local(
 
     c(v) ∈ {degree, pagerank, betweenness}.
     """
-    N = A.shape[0]
     prod = 1.0
     for W in model_W:
         s = np.linalg.svd(W, compute_uv=False)
@@ -167,7 +166,7 @@ def theory_constants(
     R_X: Optional[float] = None,
     R_A: Optional[float] = None,
 ) -> Dict[str, float]:
-    """计算并返回 P2 训练后必须落盘的 8 个 theory scalars (Director 01:26 UTC 指令).
+    """Compute the theory scalars recorded after P2 training.
 
     Returns
     -------

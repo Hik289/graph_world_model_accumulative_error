@@ -1,8 +1,8 @@
-"""图生成器统一接口与拓扑工厂.
+"""Common graph-generator interface and topology factory.
 
-实现 7 类拓扑生成器 (chain / tree / grid / small_world / scale_free / star / complete).
-所有生成器返回 GraphSample, 接收 seed 严格控制随机性. 与 spec
-``data/specs/topology_generators.md`` 对齐.
+The seven generators (chain, tree, grid, small_world, scale_free, star, and
+complete) return :class:`GraphSample` instances and are deterministic for a
+given seed.
 """
 from __future__ import annotations
 
@@ -14,33 +14,27 @@ import numpy as np
 import networkx as nx
 import scipy.sparse as sp
 
+from ..utils.seeding import stable_seed
 
-# ---------------------------------------------------------------------------
-# 数据类
-# ---------------------------------------------------------------------------
 
 @dataclass
 class GraphSample:
-    """单个图样本."""
+    """One generated graph and its derived representations."""
 
     A_dense: np.ndarray             # (N, N) float32  unweighted 0/1
-    A_sparse: sp.csr_matrix         # 稀疏镜像
+    A_sparse: sp.csr_matrix         # Sparse copy of A_dense
     A_norm: np.ndarray              # (N, N) float32  D^{-1/2}(A+I)D^{-1/2}
     is_directed: bool
     N: int
-    topology: str                   # 拓扑类型字符串
-    params: Dict[str, Any]          # 实际生成参数
+    topology: str                   # Topology name
+    params: Dict[str, Any]          # Effective generator parameters
     seed: int
     critical_roles: Dict[str, List[int]] = field(default_factory=dict)
     stats: Optional[Dict[str, float]] = None
 
 
-# ---------------------------------------------------------------------------
-# 内部工具
-# ---------------------------------------------------------------------------
-
 def _adj_from_nx(G: nx.Graph, N: int, directed: bool) -> Tuple[np.ndarray, sp.csr_matrix]:
-    """从 networkx 图取出 dense + sparse 邻接, 节点 relabel 到 0..N-1."""
+    """Return dense and sparse adjacency matrices with nodes relabeled 0..N-1."""
     mapping = {n: i for i, n in enumerate(sorted(G.nodes()))}
     G2 = nx.relabel_nodes(G, mapping)
     if directed:
@@ -48,24 +42,21 @@ def _adj_from_nx(G: nx.Graph, N: int, directed: bool) -> Tuple[np.ndarray, sp.cs
     else:
         A_sp = nx.to_scipy_sparse_array(G2, nodelist=list(range(N)), format="csr", dtype=np.float32)
     A_dense = A_sp.toarray().astype(np.float32)
-    # 去自环, simple graph 强制约束
+    # Enforce a simple graph without self-loops.
     np.fill_diagonal(A_dense, 0.0)
     if not directed:
-        # 对称化兜底 (浮点误差归零)
+        # Enforce symmetry after conversion.
         A_dense = ((A_dense + A_dense.T) > 0).astype(np.float32)
     A_sp = sp.csr_matrix(A_dense)
     return A_dense, A_sp
 
 
 def _normalize_adj(A_dense: np.ndarray) -> np.ndarray:
-    """对称归一化邻接 Ã = D^{-1/2}(A+I)D^{-1/2}.
-
-    self-loop 显式加上. 用作 dynamic_simulator 默认归一化邻接.
-    """
+    """Compute symmetric normalization D^{-1/2}(A+I)D^{-1/2}."""
     N = A_dense.shape[0]
     A_self = A_dense + np.eye(N, dtype=np.float32)
     d = A_self.sum(axis=1)
-    # 防 0 division
+    # Isolated nodes retain a finite normalization.
     d_safe = np.where(d > 0, d, 1.0)
     d_inv_sqrt = 1.0 / np.sqrt(d_safe)
     D_inv_sqrt = np.diag(d_inv_sqrt).astype(np.float32)
@@ -74,15 +65,11 @@ def _normalize_adj(A_dense: np.ndarray) -> np.ndarray:
 
 
 def _ensure_connected(G: nx.Graph) -> bool:
-    """是否连通 (无向图)."""
+    """Return whether a graph is connected."""
     if G.is_directed():
         return nx.is_weakly_connected(G)
     return nx.is_connected(G)
 
-
-# ---------------------------------------------------------------------------
-# 7 类拓扑生成器
-# ---------------------------------------------------------------------------
 
 def _gen_chain(N: int, seed: int, directed: bool = False, **_: Any) -> nx.Graph:
     G = nx.path_graph(N, create_using=nx.DiGraph if directed else nx.Graph)
@@ -226,32 +213,26 @@ _TOPOLOGY_DISPATCH = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Critical-role 标注
-# ---------------------------------------------------------------------------
-
 def _annotate_critical_roles(A_dense: np.ndarray, topology: str, seed: int) -> Dict[str, List[int]]:
-    """按 spec §5 自动标注 critical-role 节点."""
+    """Assign deterministic critical-node roles."""
     N = A_dense.shape[0]
-    # 用无向 graph 算 degree/betweenness 即可
+    # Roles are based on the undirected projection.
     G = nx.from_numpy_array(A_dense)
     degree = dict(G.degree())
     deg_arr = np.array([degree[i] for i in range(N)])
-    # top-5% 向上取整 ≥ 1
+    # Use at least one node for each percentile-based role.
     n_top = max(1, math.ceil(0.05 * N))
-    # hub: degree top-5%
+    # Hubs are the top 5% by degree.
     hub_ids = list(np.argsort(deg_arr)[-n_top:][::-1].astype(int))
-    # bridge: betweenness top-5% (N 大时较慢但 P1 主要 N=50/100)
-    try:
-        btw = nx.betweenness_centrality(G)
-        btw_arr = np.array([btw[i] for i in range(N)])
-        bridge_ids = list(np.argsort(btw_arr)[-n_top:][::-1].astype(int))
-    except Exception:
-        bridge_ids = []
-    # leaf: degree == 1
+    # Bridges are the top 5% by betweenness centrality.
+    btw = nx.betweenness_centrality(G)
+    btw_arr = np.array([btw[i] for i in range(N)])
+    bridge_ids = list(np.argsort(btw_arr)[-n_top:][::-1].astype(int))
+    # Leaves have degree one.
     leaf_ids = list(np.where(deg_arr == 1)[0].astype(int))
-    # action / target: 伪随机, 从 non-leaf 抽
-    rng = np.random.default_rng(seed=hash(("role", topology, seed)) % (2 ** 31))
+    # Derive action/target roles from a process-independent seed. Python's
+    # built-in hash is intentionally randomized between interpreter processes.
+    rng = np.random.default_rng(seed=stable_seed("role", topology, seed))
     non_leaf = np.where(deg_arr != 1)[0]
     if len(non_leaf) == 0:
         non_leaf = np.arange(N)
@@ -269,10 +250,6 @@ def _annotate_critical_roles(A_dense: np.ndarray, topology: str, seed: int) -> D
     }
 
 
-# ---------------------------------------------------------------------------
-# 公共 API
-# ---------------------------------------------------------------------------
-
 def generate(
     topology: str,
     N: int,
@@ -282,17 +259,17 @@ def generate(
     compute_stats: bool = False,
     **kwargs: Any,
 ) -> GraphSample:
-    """统一拓扑工厂.
+    """Generate a graph sample.
 
     Parameters
     ----------
-    topology : 7 类拓扑名之一.
-    N : 节点数. 必须 >= 2.
-    seed : 随机种子.
-    directed : 是否生成有向版本.
-    annotate_roles : 是否标注 critical_roles.
-    compute_stats : 是否立即计算 stats (惰性, 默认 False).
-    **kwargs : 透传给具体生成器 (e.g. k / p / m / variant / shape).
+    topology : One of the seven supported topology names.
+    N : Number of nodes; must be at least two.
+    seed : Random seed.
+    directed : Generate a directed variant when true.
+    annotate_roles : Populate ``critical_roles`` when true.
+    compute_stats : Compute graph statistics eagerly when true.
+    **kwargs : Topology-specific options such as k, p, m, variant, or shape.
 
     Returns
     -------

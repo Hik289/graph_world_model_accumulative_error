@@ -1,13 +1,12 @@
 """P5 + P6 + Exp 24 ext batch.
 
-Per Director directive 2026-05-13 13:11 UTC + p3_p6_experiment_dataset_matrix.md §2:
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+Configuration follows p3_p6_experiment_dataset_matrix.md §2.
 
 P5:
 - Exp 10: rollout correction 7 policies (random / uncertainty / degree / pagerank / betweenness / GEAF / oracle) under 10% budget
 - Exp 11: graph rewiring 6 methods on scale_free
 - Exp 18: scheduled sampling + DE-trained baselines on Q-sweep (H7 redemption + A3 extended)
-        ⚠️ initial version: H ∈ {1,2,4,8,16,32} + ε=1e-2; multi-axis ext per Director decision later
+        Initial sweep: H ∈ {1,2,4,8,16,32} and ε=1e-2
 - Exp 19: uncertainty calibration (5 methods)
 
 P6:
@@ -20,10 +19,10 @@ Exp 24 ext: 3 memory variants (recurrent / transformer / retrieval). Architectur
 
 Total target: ~50 GPU-h spec, ~15-20 wall-h actual on 3 GPU.
 
-⚠️ Improvements vs P4 helper (per Director feedback):
+Runner safeguards:
 - file-existence early check (skip jobs with output JSON < 24h old)
 - auto-completion (each baseline finishes → exit if all done, else continue)
-- ⚠️ No infinite re-cycling
+- no infinite recycling
 """
 from __future__ import annotations
 
@@ -31,13 +30,8 @@ import argparse
 import json
 import math
 import os
-import queue as queue_mod
 import sys
 import time
-import multiprocessing as mp
-from collections import defaultdict
-from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -46,11 +40,11 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 
 from src.baselines import BASELINE_REGISTRY
-from src.graph_generators import generate, compute_all
+from src.graph_generators import generate
 from src.metrics import (
-    RolloutPrediction, node_mse, return_error, geaf_global,
-    theory_constants, geaf_local, failure_propagation_depth,
+    geaf_local, failure_propagation_depth,
 )
+from src.utils.seeding import stable_seed
 from scripts._runner_utils import skip_if_done, now_jst
 
 CEIL = 1e10
@@ -105,12 +99,12 @@ def exp10_correction(p2_dir, data_root, out_dir, dev, H_eval=20):
     - Pick top-10% nodes (per policy ranking) for "correction" (just zero-out their error)
     - Compare corrected NodeMSE@H to uncorrected
     """
-    print(f"[Exp 10] correction policies (10% budget)")
+    print("[Exp 10] correction policies (10% budget)")
     t0 = time.time()
     rows = []
     out_path_check = os.path.join(out_dir, "exp10_correction.csv")
     if skip_if_done(out_path_check):
-        print(f"  Exp 10: skip (exists < 24h)")
+        print("  Exp 10: skip (exists < 24h)")
         return {"exp": 10, "n_rows": "skipped", "out": out_path_check}
     for baseline in BASELINES:
         for topo in TOPOLOGIES_P5:
@@ -143,7 +137,7 @@ def exp10_correction(p2_dir, data_root, out_dir, dev, H_eval=20):
                 model_W = model.gnn_W() if hasattr(model, 'gnn_W') else []
                 if not model_W:
                     model_W = [np.eye(D, dtype=np.float32)]
-                rng = np.random.default_rng(seed=hash((baseline, topo, seed, "exp10")) % (2 ** 31))
+                rng = np.random.default_rng(seed=stable_seed(baseline, topo, seed, "exp10"))
                 policies = {
                     "random": rng.permutation(N)[:budget],
                     "uncertainty": np.argsort(err_per_node)[-budget:],
@@ -206,11 +200,11 @@ def exp11_rewiring(p2_dir, data_root, out_dir, dev, H_eval=20):
       - sparsify (drop 20% lowest-weight edges)
       - densify (add 20% random edges)
     """
-    print(f"[Exp 11] graph rewiring on scale_free")
+    print("[Exp 11] graph rewiring on scale_free")
     t0 = time.time()
     out_path = os.path.join(out_dir, "exp11_rewiring.csv")
     if skip_if_done(out_path):
-        print(f"  Exp 11: skip (exists)")
+        print("  Exp 11: skip (exists)")
         return {"exp": 11, "n_rows": "skipped", "out": out_path}
     rows = []
     rewiring_methods = ["identity", "drop_pagerank", "add_random", "flip_random", "sparsify", "densify"]
@@ -232,7 +226,7 @@ def exp11_rewiring(p2_dir, data_root, out_dir, dev, H_eval=20):
             H = min(H_eval, T_traj)
             for method in rewiring_methods:
                 A_new = A_orig.copy()
-                rng = np.random.default_rng(seed=hash((baseline, seed, method)) % (2 ** 31))
+                rng = np.random.default_rng(seed=stable_seed(baseline, seed, method))
                 if method == "drop_pagerank":
                     from src.metrics.geaf import _pagerank_numpy
                     pr = _pagerank_numpy(A_orig)
@@ -310,22 +304,22 @@ def exp11_rewiring(p2_dir, data_root, out_dir, dev, H_eval=20):
 # ---------------------------------------------------------------------------
 
 def exp18_de_extended(p2_dir, data_root, out_dir, dev):
-    """⚠️ INITIAL VERSION ONLY (per Director allow):
-    - H ∈ {1, 2, 4, 8, 16, 32} (not 64/128 — would need T>32 DE rollouts, 我们目前只有 T=32)
+    """Initial DE evaluation:
+    - H ∈ {1, 2, 4, 8, 16, 32}; longer horizons require longer rollouts
     - ε = 1e-2 (single amplitude, not 3-level sweep)
     - FE-trained baselines evaluated on DE rollouts with edge perturbation
 
-    Multi-axis sweep extension awaits Director decision after initial results.
+    This entry point runs the fixed single-amplitude configuration.
 
     For each (baseline, topo, seed), eval on DE rollouts:
       - clean DE rollout (use de_test_X[i])
       - perturbed DE rollout: inject hub-node X_0 += ε
     """
-    print(f"[Exp 18] DE evaluation initial version (no Q-sweep, no multi-axis)")
+    print("[Exp 18] DE evaluation initial version (no Q-sweep, no multi-axis)")
     t0 = time.time()
     out_path = os.path.join(out_dir, "exp18_de_extended.csv")
     if skip_if_done(out_path):
-        print(f"  Exp 18: skip (exists)")
+        print("  Exp 18: skip (exists)")
         return {"exp": 18, "n_rows": "skipped", "out": out_path}
     rows = []
     horizons = [1, 2, 4, 8, 16, 32]
@@ -392,7 +386,7 @@ def exp18_de_extended(p2_dir, data_root, out_dir, dev):
     pd.DataFrame(rows).to_csv(out_path, index=False)
     print(f"  Exp 18: {len(rows)} rows → {out_path} ({time.time()-t0:.1f}s)")
     return {"exp": 18, "n_rows": len(rows), "out": out_path,
-            "note": "initial version, multi-axis sweep awaits Director decision"}
+            "note": "single-amplitude evaluation"}
 
 
 # ---------------------------------------------------------------------------
@@ -409,14 +403,13 @@ def exp19_uncertainty(p2_dir, data_root, out_dir, dev, H_eval=20):
       - random
       - uncertainty=actual_error (oracle)
     """
-    print(f"[Exp 19] uncertainty calibration")
+    print("[Exp 19] uncertainty calibration")
     t0 = time.time()
     out_path = os.path.join(out_dir, "exp19_uncertainty.csv")
     if skip_if_done(out_path):
-        print(f"  Exp 19: skip (exists)")
+        print("  Exp 19: skip (exists)")
         return {"exp": 19, "n_rows": "skipped", "out": out_path}
     rows = []
-    methods = ["random", "feature_magnitude", "GEAF_weighted", "degree", "oracle"]
     for baseline in ["B5_ActionNode", "B6_ErrorAware"]:
         for topo in ["scale_free", "small_world"]:
             for seed in SEEDS:
@@ -444,7 +437,7 @@ def exp19_uncertainty(p2_dir, data_root, out_dir, dev, H_eval=20):
                 model_W = model.gnn_W() if hasattr(model, 'gnn_W') else [np.eye(D, dtype=np.float32)]
                 if not model_W:
                     model_W = [np.eye(D, dtype=np.float32)]
-                rng = np.random.default_rng(seed=hash((baseline, topo, seed, "exp19")) % (2 ** 31))
+                rng = np.random.default_rng(seed=stable_seed(baseline, topo, seed, "exp19"))
                 # Compute uncertainty estimates
                 feat_mag = np.linalg.norm(X_pred[:, H], axis=-1).mean(axis=0)
                 geaf_v = geaf_local(A_dense, model_W, kind="degree")
@@ -490,11 +483,11 @@ def exp14_agent_calling_tree(data_root, out_dir, dev):
     of homogeneous-trained models on heterogeneous test data — this is a weaker version
     than full RGCN/MPNN-typed retrain. Disclosed as caveat.
     """
-    print(f"[Exp 14] multi-agent calling tree (zero-shot transfer)")
+    print("[Exp 14] multi-agent calling tree (zero-shot transfer)")
     t0 = time.time()
     out_path = os.path.join(out_dir, "exp14_agent_calling_tree.csv")
     if skip_if_done(out_path):
-        print(f"  Exp 14: skip (exists)")
+        print("  Exp 14: skip (exists)")
         return {"exp": 14, "n_rows": "skipped", "out": out_path}
     rows = []
     test_dir = os.path.join(data_root, "agent_calling_tree", "test")
@@ -532,8 +525,8 @@ def exp14_agent_calling_tree(data_root, out_dir, dev):
     import pandas as pd
     pd.DataFrame(rows).to_csv(out_path, index=False)
     print(f"  Exp 14: {len(rows)} rows → {out_path} ({time.time()-t0:.1f}s)")
-    print(f"  ⚠️ Caveat: zero-shot transfer of homogeneous-trained models on heterogeneous test;")
-    print(f"     full RGCN/MPNN-typed retrain deferred to follow-up.")
+    print("  ⚠️ Caveat: zero-shot transfer of homogeneous-trained models on heterogeneous test;")
+    print("     full RGCN/MPNN-typed retrain deferred to follow-up.")
     return {"exp": 14, "n_rows": len(rows), "out": out_path,
             "note": "zero-shot transfer; full hetero retrain deferred"}
 
@@ -543,11 +536,11 @@ def exp14_agent_calling_tree(data_root, out_dir, dev):
 # ---------------------------------------------------------------------------
 
 def exp15_agent_failure_propagation(data_root, out_dir, dev):
-    print(f"[Exp 15] agent workflow failure propagation")
+    print("[Exp 15] agent workflow failure propagation")
     t0 = time.time()
     out_path = os.path.join(out_dir, "exp15_agent_fpd.csv")
     if skip_if_done(out_path):
-        print(f"  Exp 15: skip (exists)"); return {"exp": 15, "n_rows": "skipped", "out": out_path}
+        print("  Exp 15: skip (exists)"); return {"exp": 15, "n_rows": "skipped", "out": out_path}
     rows = []
     test_dir = os.path.join(data_root, "agent_calling_tree", "test")
     files = sorted(os.listdir(test_dir))[:50]
@@ -603,11 +596,11 @@ def exp15_agent_failure_propagation(data_root, out_dir, dev):
 # ---------------------------------------------------------------------------
 
 def exp16_agent_correction(data_root, out_dir, dev):
-    print(f"[Exp 16] critical node correction in agent workflows")
+    print("[Exp 16] critical node correction in agent workflows")
     t0 = time.time()
     out_path = os.path.join(out_dir, "exp16_agent_correction.csv")
     if skip_if_done(out_path):
-        print(f"  Exp 16: skip (exists)"); return {"exp": 16, "n_rows": "skipped", "out": out_path}
+        print("  Exp 16: skip (exists)"); return {"exp": 16, "n_rows": "skipped", "out": out_path}
     rows = []
     test_dir = os.path.join(data_root, "agent_calling_tree", "test")
     files = sorted(os.listdir(test_dir))[:30]
@@ -620,13 +613,12 @@ def exp16_agent_correction(data_root, out_dir, dev):
         X = inst["trace_X"]
         N_g = X.shape[1]
         T_traj = X.shape[0] - 1
-        crit = inst["critical_roles"]
         budget = max(1, int(0.10 * N_g))
         # baseline error
         err_final = X[T_traj, :, 5]
         baseline_err = float(err_final.mean())
         for policy in policies:
-            rng = np.random.default_rng(hash((fname, policy)) % (2 ** 31))
+            rng = np.random.default_rng(stable_seed(fname, policy))
             if policy == "random":
                 correction_set = rng.permutation(N_g)[:budget]
             elif policy == "degree":
@@ -665,15 +657,14 @@ def exp16_agent_correction(data_root, out_dir, dev):
 # ---------------------------------------------------------------------------
 
 def exp25_skill_graph(data_root, out_dir, dev):
-    print(f"[Exp 25] platform skill graph maintenance")
+    print("[Exp 25] platform skill graph maintenance")
     t0 = time.time()
     out_path = os.path.join(out_dir, "exp25_skill_graph.csv")
     if skip_if_done(out_path):
-        print(f"  Exp 25: skip (exists)"); return {"exp": 25, "n_rows": "skipped", "out": out_path}
+        print("  Exp 25: skip (exists)"); return {"exp": 25, "n_rows": "skipped", "out": out_path}
     rows = []
     test_dir = os.path.join(data_root, "platform_skill_graph", "test")
     files = sorted(os.listdir(test_dir))[:30]
-    H_eval = 20
     for fname in files:
         try:
             inst = torch.load(os.path.join(test_dir, fname), weights_only=False)
@@ -721,9 +712,9 @@ def exp25_skill_graph(data_root, out_dir, dev):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_root", default="PROJECT_ROOT/data")
-    parser.add_argument("--p2_dir", default="PROJECT_ROOT/results/p2_baselines")
-    parser.add_argument("--out_dir", default="PROJECT_ROOT/results/p5_p6")
+    parser.add_argument("--data_root", default=os.path.join(REPO_ROOT, "data"))
+    parser.add_argument("--p2_dir", default=os.path.join(REPO_ROOT, "results", "p2_baselines"))
+    parser.add_argument("--out_dir", default=os.path.join(REPO_ROOT, "results", "p5_p6"))
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--exps", nargs="+",
                         default=["10", "11", "18", "19", "14", "15", "16", "25"])

@@ -1,14 +1,14 @@
 """B6 Error-Aware GWM (ours): GCN backbone + multi-step rollout loss + spectral reg
 + critical-node weighted correction (during training).
 
-⚠️ Patched 2026-05-13 per ml_engineer_gpt audit (experiments/audit/b6_error_aware_audit.md):
-  - Item 3 (Critical): R_critical implemented via critical_node_weighted_loss helper
-  - Item 2: spectral reg 2→4 power iter + register_buffer warm-start u for stability
-  - Item 4: gnn_W() returns top-d×d via SVD-based reduction (not naive square truncation)
+Implementation details:
+  - ``R_critical`` uses ``critical_node_weighted_loss``.
+  - Spectral regularization uses four power iterations and a warm-start buffer.
+  - ``gnn_W()`` uses an SVD-based top-d×d reduction.
 """
 from __future__ import annotations
 
-from typing import List, Optional, Sequence
+from typing import List, Optional
 
 import numpy as np
 import torch

@@ -1,6 +1,5 @@
-"""
-F5 v2 — Full H3 Bidirectional Falsifier
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+"""F5 v2 — Full H3 bidirectional falsifier.
+
 Left panel:  GEAF_hat per topology (7 topos, same as v1)
 Right panel: AffectedNodes@H=20 per topology, B2_GCN, mean across inject_positions
              → complete=0.02 (low, uniform), star=0.95 (high, uniform)
@@ -21,15 +20,15 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 
 warnings.filterwarnings("ignore")
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
-P2_RAW    = "PROJECT_ROOT/results/p2_baselines_raw.csv"
-EXP3_MAIN = "PROJECT_ROOT/results/p4/exp3_node_injection.csv"
-EXP3_COMP = "PROJECT_ROOT/results/p4/exp3_complete_supplemental.csv"
-OUT       = "PROJECT_ROOT/results/figures/p2"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+P2_RAW = os.path.join(REPO_ROOT, "results", "p2_baselines_raw.csv")
+EXP3_MAIN = os.path.join(REPO_ROOT, "results", "p4", "exp3_node_injection.csv")
+EXP3_COMP = os.path.join(REPO_ROOT, "results", "p4", "exp3_complete_supplemental.csv")
+OUT = os.path.join(REPO_ROOT, "results", "figures", "p2")
 os.makedirs(OUT, exist_ok=True)
 
 # ─── Style ────────────────────────────────────────────────────────────────────
@@ -185,7 +184,7 @@ ax_r.annotate(
 ax_r.text(0.98, 0.97,
           "✓ Insight 3 (empirical RHS):\nstar AffN " + f"{aff_star/max(aff_complete,1e-9):.0f}" + "× > complete AffN\n"
           "Both position-flat → topology\nstructure, not position, drives spread\n"
-          "(H3 verdict deferred to data_scientist)",
+          "(H3 verdict requires the amplitude-sweep result)",
           transform=ax_r.transAxes, ha="right", va="top", fontsize=6.5,
           color="#222222",
           bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.92, lw=0.5))

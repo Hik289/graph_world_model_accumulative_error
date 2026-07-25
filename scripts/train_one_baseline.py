@@ -1,15 +1,14 @@
-"""单 (baseline × topology × outer_seed) 训练脚本.
+"""Train one baseline/topology/seed configuration.
 
-输入: PROJECT_ROOT/data/synthetic_rollouts/fe_{top}_N50_seed{S}_T50.pt
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
-输出: PROJECT_ROOT/results/p2_baselines/{top}/{baseline}_seed{S}.json
-      + checkpoints/{top}/{baseline}_seed{S}.pt  (可选, 默认存)
+Input: ``data/synthetic_rollouts/fe_{top}_N50_seed{S}_T50.pt``.
+Outputs: ``results/p2_baselines/{top}/{baseline}_seed{S}.json`` and, by
+default, ``checkpoints/{top}/{baseline}_seed{S}.pt``.
 
 每个 run output JSON 包含:
   - meta: baseline, topology, outer_seed, N, T, epochs, train_time_s
   - train_loss / val_loss curves
   - final eval metrics: NodeMSE@{1,2,4,8,16,32}, EdgeF1@H (FE 上 trivially=1.0)
-  - theory_constants: 全 8 个 scalars (per Director 01:26 UTC)
+  - theory constants used by the analysis
   - growth_slope, GEAF_hat
 """
 from __future__ import annotations
@@ -20,23 +19,21 @@ import os
 import sys
 import time
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 
-from src.baselines import BASELINE_REGISTRY, ErrorAwareGWM
+from src.baselines import BASELINE_REGISTRY
 from src.graph_generators import generate, compute_all
 from src.metrics import (
     RolloutPrediction, node_mse, edge_f1_binary, growth_slope,
-    geaf_global, theory_constants,
+    theory_constants,
 )
-from src.metrics.geaf import _spectral_radius
 
 JST = timezone(timedelta(hours=9))
 
@@ -91,7 +88,6 @@ def train_one(
     A_norm_t = torch.from_numpy(g.A_norm).float().to(dev)
     A_dense = g.A_dense
     stats = compute_all(g)
-    rho_A_raw = stats["rho_A"]
     rho_A_norm = stats["rho_A_norm"]
 
     # MLP-WM N>50 标 N/A
@@ -120,8 +116,6 @@ def train_one(
     # 构造 train 1-step pair tensor
     def make_pairs(X: torch.Tensor, A: torch.Tensor):
         # X: (n_traj, T+1, N, D); A: (n_traj, T, D_a)
-        n_traj, Tp1, _, _ = X.shape
-        T = Tp1 - 1
         Xt = X[:, :-1].reshape(-1, N, D)           # (n_traj*T, N, D)
         Xtp1 = X[:, 1:].reshape(-1, N, D)
         At = A.reshape(-1, A.shape[-1])             # (n_traj*T, D_a)
@@ -281,8 +275,8 @@ def main():
     parser.add_argument("--baseline", required=True, choices=list(BASELINE_REGISTRY.keys()))
     parser.add_argument("--topology", required=True)
     parser.add_argument("--outer_seed", type=int, required=True)
-    parser.add_argument("--data_root", default="PROJECT_ROOT/data")
-    parser.add_argument("--out_dir", default="PROJECT_ROOT/results/p2_baselines")
+    parser.add_argument("--data_root", default=os.path.join(REPO_ROOT, "data"))
+    parser.add_argument("--out_dir", default=os.path.join(REPO_ROOT, "results", "p2_baselines"))
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--no_ckpt", action="store_true")

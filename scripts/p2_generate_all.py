@@ -1,7 +1,6 @@
-"""P2 数据全量落盘 (按 data/specs/dataset_layout.md).
+"""Generate the P2 datasets described by data/specs/dataset_layout.md.
 
-生成:
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+Outputs:
 - synthetic_graphs/      7 拓扑 × 3 outer seed × {N=50 默认 + sweep} + ER × p
 - synthetic_rollouts/    FE rollout T=50 (训练) + T=32 (评估), 各 seed
 - injection_data/        Exp 3/4 注入轨迹: node-only / edge-only / +bridge / +hub
@@ -34,9 +33,10 @@ from src.simulators import (
     rollout, generate_calling_tree, simulate_calling_tree,
     generate_skill_graph, simulate_skill_graph,
 )
+from src.utils.seeding import stable_seed
 
 JST = timezone(timedelta(hours=9))
-DATA_ROOT_DEFAULT = "PROJECT_ROOT/data"
+DATA_ROOT_DEFAULT = os.path.join(REPO_ROOT, "data")
 CODE_VERSION = "1"  # 与 dataset_layout.md §2 manifest.version 对齐
 
 
@@ -274,7 +274,7 @@ def gen_synthetic_rollouts(data_root: str) -> Dict[str, Any]:
                     if W_shared is None:
                         W_shared = tr.W.copy()
                         U_shared = tr.U.copy()
-                    # rollout 默认 env_seed=hash(top, N, graph.seed), inner trajectory 间 W/U 自动一致
+                    # The rollout derives one stable environment seed per graph.
                     if split_name == "train":
                         train_X.append(tr.X); train_actions.append(tr.actions)
                     elif split_name == "val":
@@ -332,8 +332,6 @@ def gen_injection_data(data_root: str) -> Dict[str, Any]:
     files = []
     t0 = time.time()
     T_inj = 32                  # Exp 3/4 default horizon
-    rng_per_kind = np.random.default_rng(0)
-
     for top in TOP_DEFAULTS:
         for outer_seed in OUTER_SEEDS:
             params = TOP_DEFAULTS.get(top, {})
@@ -366,12 +364,12 @@ def gen_injection_data(data_root: str) -> Dict[str, Any]:
                         pert = np.zeros((N_DEFAULT, 8), dtype=np.float32)
                         for nid in inj_nodes:
                             if 0 <= nid < N_DEFAULT:
-                                pert[nid] = np.random.default_rng(seed=hash((kind, inner, nid)) % (2**31)) \
+                                pert[nid] = np.random.default_rng(seed=stable_seed(kind, inner, nid)) \
                                     .standard_normal(8).astype(np.float32) * 0.5
                         schedule = [(T_inj // 4, {"perturbation": pert})]
                     elif kind == "edge_random":
                         # edge perturbation: 给整张 X 加噪声 (近似)
-                        pert = np.random.default_rng(seed=hash((kind, inner, "all")) % (2**31)) \
+                        pert = np.random.default_rng(seed=stable_seed(kind, inner, "all")) \
                             .standard_normal((N_DEFAULT, 8)).astype(np.float32) * 0.1
                         schedule = [(T_inj // 4, {"perturbation": pert})]
                     else:

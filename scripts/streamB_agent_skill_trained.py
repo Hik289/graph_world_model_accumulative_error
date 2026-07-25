@@ -1,7 +1,7 @@
-"""Stream B: Proper end-to-end training on agent_calling_tree + platform_skill_graph.
+"""Stream B: End-to-end training on agent calling and platform skill graphs.
 
-Replace P5 zero-shot caveat (hom-trained model on hetero data).
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+This replaces the P5 zero-shot evaluation of homogeneous models on
+heterogeneous data.
 
 Spec:
 - 5 baselines (B1 MLP / B2 GCN / B3 MPNN / B4 GPS / B5 ActionNode) + B6 patched + R-GCN-Hetero  
@@ -9,8 +9,8 @@ Spec:
 - Use R-GCN-Hetero implementation (already exists, has edge_type/node_type embeddings)
 - For homogeneous baselines, use edge_type=0 (ignore types) or skip homogeneous on hetero (commonly we use RGCN only)
 
-Actually per Director: "5 baselines + B6 patched" — Use R-GCN-style edge embedding for ALL.
-We'll use the existing RGCNHetero class with different n_edge_types per testbed.
+All variants use the R-GCN-style edge embeddings implemented by
+``RGCNHetero``, with the number of edge types set per testbed.
 
 Outputs: results/agent_skill_trained/{testbed}/{baseline}_seed{S}.json
 """
@@ -18,18 +18,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import queue as queue_mod
 import sys
 import time
 import multiprocessing as mp
-from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import timezone, timedelta
+from typing import Any, Dict
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -38,7 +36,7 @@ sys.path.insert(0, REPO_ROOT)
 from src.baselines.rgcn_hetero import RGCNHetero
 from src.simulators.agent_calling_tree import NODE_TYPES, EDGE_TYPES, D_FEAT, D_ACTION
 from src.simulators.platform_skill_graph import SKILL_NODE_TYPES, SKILL_EDGE_TYPES
-from src.metrics import failure_propagation_depth, theory_constants
+from src.metrics import failure_propagation_depth
 from src.metrics.core import cost_latency
 from scripts._runner_utils import skip_if_done, now_jst
 
@@ -273,7 +271,7 @@ def worker_fn(gpu_id, job_q, res_q, data_root, out_dir, log_path, epochs):
                               data_root=data_root, out_dir=out_dir,
                               device=dev, epochs=epochs)
             status = "ok"
-        except Exception as e:
+        except Exception:
             import traceback
             with open(log_path, "a") as f:
                 f.write(f"[{now_jst()}] [GPU{gpu_id}] EXCEPTION ({baseline},{testbed},seed{seed}):\n")
@@ -289,9 +287,9 @@ def worker_fn(gpu_id, job_q, res_q, data_root, out_dir, log_path, epochs):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_root", default="PROJECT_ROOT/data")
-    parser.add_argument("--out_dir", default="PROJECT_ROOT/results/agent_skill_trained")
-    parser.add_argument("--log_path", default="PROJECT_ROOT/logs/stream_b.log")
+    parser.add_argument("--data_root", default=os.path.join(REPO_ROOT, "data"))
+    parser.add_argument("--out_dir", default=os.path.join(REPO_ROOT, "results", "agent_skill_trained"))
+    parser.add_argument("--log_path", default=os.path.join(REPO_ROOT, "logs", "stream_b.log"))
     parser.add_argument("--gpu_ids", nargs="+", type=int, default=[2])
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--testbeds", nargs="+", default=["agent_calling_tree", "platform_skill_graph"])

@@ -1,11 +1,10 @@
-"""Stream A: DE-trained baselines with edge-prediction head.
+"""Stream A: DE-trained baselines with an edge-prediction head.
 
-Per Director 2026-05-14 21:02 UTC: 6 topo (drop complete) × 6 baselines × 3 seeds = 108 jobs.
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+Runs six topologies (excluding complete) × six baselines × three seeds.
 
 Loss: L_total = L_X (node MSE) + λ_e * BCE(Â, A_true), default λ_e = 1.0
 
-Each run落盘:
+Each run records:
 - NodeMSE@H and EdgeF1@H for H ∈ {1,2,4,8,16,32}
 - theory_constants with L_g (edge Lipschitz, M_X derived)
 - final_train_loss, final_train_loss_node, final_train_loss_edge
@@ -22,12 +21,11 @@ import queue as queue_mod
 import sys
 import time
 import multiprocessing as mp
-from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import timezone, timedelta
+from typing import Any, Dict
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -36,8 +34,7 @@ sys.path.insert(0, REPO_ROOT)
 from src.baselines import BASELINE_REGISTRY
 from src.baselines.edge_head import WorldModelWithEdgeHead
 from src.graph_generators import generate, compute_all
-from src.metrics import RolloutPrediction, node_mse, edge_f1_binary, theory_constants
-from src.metrics.geaf import _spectral_radius
+from src.metrics import theory_constants
 from scripts._runner_utils import skip_if_done, now_jst
 
 JST = timezone(timedelta(hours=9))
@@ -93,8 +90,6 @@ def train_one_de(
     test_X = payload["test_X"]
     test_A = payload["test_A"]
     test_a = payload["test_actions"]
-    W_gt = payload.get("W")
-    U_gt = payload.get("U")
     Q_gt = payload.get("Q")
 
     # Build model
@@ -117,8 +112,7 @@ def train_one_de(
 
     # Flatten to 1-step pairs: (n_traj * T, N, D), with corresponding A
     def make_pairs(X, A, a):
-        n_traj, T_plus_1, N_g, _ = X.shape
-        T = T_plus_1 - 1
+        N_g = X.shape[2]
         # X_t, X_{t+1}: (n_traj * T, N, D)
         X_in = X[:, :-1].reshape(-1, N_g, D)
         X_target = X[:, 1:].reshape(-1, N_g, D)
@@ -320,7 +314,7 @@ def worker_fn(gpu_id, job_q, res_q, data_root, out_dir, log_path, epochs):
                                    data_root=data_root, out_dir=out_dir,
                                    device=dev, epochs=epochs)
             status = "skipped" if result.get("skipped") else "ok"
-        except Exception as e:
+        except Exception:
             import traceback
             with open(log_path, "a") as f:
                 f.write(f"[{now_jst()}] [GPU{gpu_id}] EXCEPTION on ({baseline},{topo},seed{seed}):\n")
@@ -336,9 +330,9 @@ def worker_fn(gpu_id, job_q, res_q, data_root, out_dir, log_path, epochs):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_root", default="PROJECT_ROOT/data")
-    parser.add_argument("--out_dir", default="PROJECT_ROOT/results/de_trained")
-    parser.add_argument("--log_path", default="PROJECT_ROOT/logs/de_trained.log")
+    parser.add_argument("--data_root", default=os.path.join(REPO_ROOT, "data"))
+    parser.add_argument("--out_dir", default=os.path.join(REPO_ROOT, "results", "de_trained"))
+    parser.add_argument("--log_path", default=os.path.join(REPO_ROOT, "logs", "de_trained.log"))
     parser.add_argument("--gpu_ids", nargs="+", type=int, default=[0, 1])
     parser.add_argument("--epochs", type=int, default=80)
     parser.add_argument("--filter_baselines", nargs="+", default=None)

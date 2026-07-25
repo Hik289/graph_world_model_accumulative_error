@@ -1,9 +1,14 @@
-"""单元测试: 7 类拓扑生成器 + 统计量."""
+"""Tests for the seven topology generators and graph statistics."""
 from __future__ import annotations
 
+import json
 import math
+import os
+from pathlib import Path
+import subprocess
+import sys
+
 import numpy as np
-import pytest
 
 from src.graph_generators import generate, compute_all, spectral_radius
 
@@ -70,6 +75,28 @@ def test_reproducibility():
     g1 = generate("scale_free", N=50, seed=42)
     g2 = generate("scale_free", N=50, seed=42)
     assert np.array_equal(g1.A_dense, g2.A_dense)
+    assert g1.critical_roles == g2.critical_roles
+
+
+def test_critical_roles_reproducible_across_processes():
+    project_root = Path(__file__).resolve().parents[1]
+    program = (
+        "import json; "
+        "from src.graph_generators import generate; "
+        "print(json.dumps(generate('scale_free', N=50, seed=42).critical_roles, sort_keys=True))"
+    )
+    outputs = []
+    for hash_seed in ("1", "2"):
+        env = os.environ.copy()
+        env["PYTHONHASHSEED"] = hash_seed
+        output = subprocess.check_output(
+            [sys.executable, "-c", program],
+            cwd=project_root,
+            env=env,
+            text=True,
+        )
+        outputs.append(json.loads(output))
+    assert outputs[0] == outputs[1]
 
 
 def test_critical_roles_nonempty():

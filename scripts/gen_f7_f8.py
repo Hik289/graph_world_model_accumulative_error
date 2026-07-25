@@ -1,6 +1,5 @@
-"""
-F7 + F8 — Hetero R-GCN Baseline Figures
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+"""Generate the F7 and F8 heterogeneous R-GCN baseline figures.
+
 F7: Exp 16 correction policy reduction_pct bar chart (H5 secondary signal)
 F8: R-GCN sigmoid-fixed calibration scatter (Exp 14 + Exp 25 side-by-side)
 
@@ -19,10 +18,11 @@ from scipy import stats
 warnings.filterwarnings("ignore")
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
-EXP16 = "PROJECT_ROOT/results/p6_rgcn_hetero/exp16_model_correction.csv"
-EXP14 = "PROJECT_ROOT/results/p6_rgcn_hetero/exp14_model_rollout.csv"
-EXP25 = "PROJECT_ROOT/results/p6_rgcn_hetero/exp25_model_rollout.csv"
-OUT   = "PROJECT_ROOT/results/figures/p6"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+EXP16 = os.path.join(REPO_ROOT, "results", "p6_rgcn_hetero", "exp16_model_correction.csv")
+EXP14 = os.path.join(REPO_ROOT, "results", "p6_rgcn_hetero", "exp14_model_rollout.csv")
+EXP25 = os.path.join(REPO_ROOT, "results", "p6_rgcn_hetero", "exp25_model_rollout.csv")
+OUT = os.path.join(REPO_ROOT, "results", "figures", "p6")
 os.makedirs(OUT, exist_ok=True)
 
 # ─── Style ────────────────────────────────────────────────────────────────────

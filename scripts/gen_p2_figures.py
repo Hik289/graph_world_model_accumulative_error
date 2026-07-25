@@ -1,23 +1,20 @@
-"""
-gwmerror P2 Figure Generation Script
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+"""Generate the P2 paper figures.
+
 VIZ_P2_F1_F2a_F2b_F3_F4_A1
 Generates: F1, F2a, F2b, F3, F4, A1
-Output: PROJECT_ROOT/results/figures/p2/
+Output: results/figures/p2/
 
 Author: Anonymous
 Date: 2026-05-13 JST
 """
 
-import json, os, csv, math, warnings
+import json, os, warnings
 import numpy as np
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import matplotlib.ticker as ticker
-from matplotlib.gridspec import GridSpec
 from scipy import stats
 
 warnings.filterwarnings("ignore")
@@ -100,11 +97,12 @@ BASELINE_LABELS = {
     "B6_ErrorAware": "B6 Error-Aware",
 }
 
-OUT = "PROJECT_ROOT/results/figures/p2"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(REPO_ROOT, "results", "figures", "p2")
 os.makedirs(OUT, exist_ok=True)
 
-RAW_CSV = "PROJECT_ROOT/results/p2_baselines_raw.csv"
-PRUN_BASE = "PROJECT_ROOT/results/p2_baselines"
+RAW_CSV = os.path.join(REPO_ROOT, "results", "p2_baselines_raw.csv")
+PRUN_BASE = os.path.join(REPO_ROOT, "results", "p2_baselines")
 
 # ──────────────────────────────────────────────
 # Helper: load raw CSV
@@ -171,9 +169,9 @@ def make_f1():
     w = 0.35
 
     # Left bars: ρ(A) — log scale on right y-axis via secondary
-    bars_A = ax1.bar(x - w/2, rho_A_means, w,
-                     color="#648FFF", alpha=0.85, label=r"$\rho(A)$  [error operator factor]",
-                     yerr=rho_A_stds, capsize=3, error_kw={"elinewidth": 1.2, "ecolor": "#333333"})
+    ax1.bar(x - w/2, rho_A_means, w,
+            color="#648FFF", alpha=0.85, label=r"$\rho(A)$  [error operator factor]",
+            yerr=rho_A_stds, capsize=3, error_kw={"elinewidth": 1.2, "ecolor": "#333333"})
 
     ax1.set_yscale("log")
     ax1.set_ylabel(r"$\rho(A)$  (log scale)", color="#648FFF", fontsize=10)
@@ -182,8 +180,8 @@ def make_f1():
 
     # Right axis: ρ(Ã_norm) — linear, should be ≈1 everywhere
     ax2 = ax1.twinx()
-    bars_N = ax2.bar(x + w/2, rho_An_means, w,
-                     color="#BBBBBB", alpha=0.8, label=r"$\rho(\tilde{A}_\mathrm{norm})$  [dynamics operator]")
+    ax2.bar(x + w/2, rho_An_means, w,
+            color="#BBBBBB", alpha=0.8, label=r"$\rho(\tilde{A}_\mathrm{norm})$  [dynamics operator]")
     ax2.set_ylim(0, 2.0)
     ax2.set_ylabel(r"$\rho(\tilde{A}_\mathrm{norm})$  (linear)", color="#555555", fontsize=10)
     ax2.tick_params(axis="y", labelcolor="#555555")
@@ -220,7 +218,7 @@ def make_f1():
     for fmt in ("png", "pdf"):
         fig.savefig(os.path.join(OUT, f"f1.{fmt}"), dpi=200)
     plt.close(fig)
-    print(f"  [F1] Saved f1.png + f1.pdf")
+    print("  [F1] Saved f1.png + f1.pdf")
 
     # Caption
     caption = (
@@ -239,7 +237,7 @@ def make_f1():
     )
     with open(os.path.join(OUT, "f1_caption.txt"), "w") as fh:
         fh.write(caption)
-    print(f"  [F1] Caption saved.")
+    print("  [F1] Caption saved.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -339,7 +337,7 @@ def make_f2a():
     )
     with open(os.path.join(OUT, "f2a_caption.txt"), "w") as fh:
         fh.write(caption)
-    print(f"  [F2a] Caption saved.")
+    print("  [F2a] Caption saved.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -435,7 +433,7 @@ def make_f2b():
     )
     with open(os.path.join(OUT, "f2b_caption.txt"), "w") as fh:
         fh.write(caption)
-    print(f"  [F2b] Caption saved.")
+    print("  [F2b] Caption saved.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -560,7 +558,7 @@ def make_f3():
     for fmt in ("png", "pdf"):
         fig.savefig(os.path.join(OUT, f"f3.{fmt}"), dpi=200)
     plt.close(fig)
-    print(f"  [F3] Saved f3.png + f3.pdf")
+    print("  [F3] Saved f3.png + f3.pdf")
 
     caption = (
         "F3. Empirical decomposition of the joint error operator $B$ (Def.~3, \\texttt{insight.md}) "
@@ -583,7 +581,7 @@ def make_f3():
     )
     with open(os.path.join(OUT, "f3_caption.txt"), "w") as fh:
         fh.write(caption)
-    print(f"  [F3] Caption saved.")
+    print("  [F3] Caption saved.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -599,7 +597,6 @@ def make_f4():
     print("[F4] Building B2 vs B6 rollout curves ...")
     HORIZONS = [1, 2, 4, 8, 16, 32]
     METRIC_KEYS = [f"NodeMSE@{h}" for h in HORIZONS]
-    STD_KEYS = [f"NodeMSE@{h}_std" for h in HORIZONS]
     TOPOS = ["scale_free", "star"]
     COMPARE_BL = ["B2_GCN", "B6_ErrorAware"]
 
@@ -644,7 +641,6 @@ def make_f4():
             DISP_CAP = 50.0  # display cap; B2_GCN diverged runs reach >1e10 by H=16
             arr_display = np.clip(arr, None, DISP_CAP)
 
-            n_seeds = arr_display.shape[0]
             mean_h = np.nanmean(arr_display, axis=0)
             std_h = np.nanstd(arr_display, axis=0)
 
@@ -683,7 +679,7 @@ def make_f4():
     for fmt in ("png", "pdf"):
         fig.savefig(os.path.join(OUT, f"f4.{fmt}"), dpi=200)
     plt.close(fig)
-    print(f"  [F4] Saved f4.png + f4.pdf")
+    print("  [F4] Saved f4.png + f4.pdf")
 
     caption = (
         "F4. Long-horizon rollout NodeMSE for B2~GCN and B6~Error-Aware on two "
@@ -700,7 +696,7 @@ def make_f4():
     )
     with open(os.path.join(OUT, "f4_caption.txt"), "w") as fh:
         fh.write(caption)
-    print(f"  [F4] Caption saved.")
+    print("  [F4] Caption saved.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -777,7 +773,7 @@ def make_a1():
     for fmt in ("png", "pdf"):
         fig.savefig(os.path.join(OUT, f"a1.{fmt}"), dpi=200)
     plt.close(fig)
-    print(f"  [A1] Saved a1.png + a1.pdf")
+    print("  [A1] Saved a1.png + a1.pdf")
 
     caption = (
         "A1 (Appendix). Seed-variance boxplots of three topology descriptors "
@@ -799,7 +795,7 @@ def make_a1():
     )
     with open(os.path.join(OUT, "a1_caption.txt"), "w") as fh:
         fh.write(caption)
-    print(f"  [A1] Caption saved.")
+    print("  [A1] Caption saved.")
 
 
 # ──────────────────────────────────────────────

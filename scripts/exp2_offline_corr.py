@@ -1,7 +1,6 @@
 """Exp 2: Correlation between graph statistics and error growth.
 
-按 README §6.2 + p3_p6 matrix §2:
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+Configuration follows README §6.2 and the P3–P6 matrix §2.
 - 8 个 graph stats × 3 error metrics (NodeMSE@20, ReturnError@20, Regret@20)
 - 跨 (baseline, topology, seed) ok-or-cap diverged
 - Pearson + Spearman + 95% bootstrap CI (Fisher-z)
@@ -25,7 +24,7 @@ import math
 import os
 import sys
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -202,9 +201,9 @@ def compute_correlations(df: pd.DataFrame, baseline_group: str, baselines_in_gro
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_root", default="PROJECT_ROOT/data")
-    parser.add_argument("--p2_dir", default="PROJECT_ROOT/results/p2_baselines")
-    parser.add_argument("--out_dir", default="PROJECT_ROOT/results")
+    parser.add_argument("--data_root", default=os.path.join(REPO_ROOT, "data"))
+    parser.add_argument("--p2_dir", default=os.path.join(REPO_ROOT, "results", "p2_baselines"))
+    parser.add_argument("--out_dir", default=os.path.join(REPO_ROOT, "results"))
     parser.add_argument("--device", default="cpu")
     args = parser.parse_args()
 

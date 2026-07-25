@@ -1,7 +1,6 @@
 """P2 baselines 4-GPU parallel scheduler.
 
-调度 6 baseline × 7 topology × 3 outer_seed = 126 jobs, 4 GPU 并行.
-import os as _os; PROJECT_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+Schedules six baselines × seven topologies × three outer seeds across four GPUs.
 逻辑:
 - 4 个 worker (one per GPU); 每 worker pop job 从 queue, 串行训练
 - 每 job 完成自动写 results/p2_baselines/{top}/{baseline}_seed{S}.json
@@ -38,7 +37,7 @@ def worker_fn(gpu_id: int, job_q: "mp.Queue", res_q: "mp.Queue",
     """单 GPU worker. 持续从 queue 取 job 直到 sentinel (None)."""
     # 限制本 worker 只能看到一张卡
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-    # ⚠️ import torch 必须在 set env 之后
+    # Import torch only after selecting the worker's GPU.
     sys.path.insert(0, REPO_ROOT)
     from scripts.train_one_baseline import train_one
     import torch
@@ -84,9 +83,9 @@ def worker_fn(gpu_id: int, job_q: "mp.Queue", res_q: "mp.Queue",
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_root", default="PROJECT_ROOT/data")
-    parser.add_argument("--out_dir", default="PROJECT_ROOT/results/p2_baselines")
-    parser.add_argument("--log_path", default="PROJECT_ROOT/logs/p2_baselines.log")
+    parser.add_argument("--data_root", default=os.path.join(REPO_ROOT, "data"))
+    parser.add_argument("--out_dir", default=os.path.join(REPO_ROOT, "results", "p2_baselines"))
+    parser.add_argument("--log_path", default=os.path.join(REPO_ROOT, "logs", "p2_baselines.log"))
     parser.add_argument("--n_gpus", type=int, default=3,
                         help="并发 GPU 数 (默认 3, 因 dltank 全空闲但可能他人会用)")
     parser.add_argument("--gpu_ids", nargs="+", type=int, default=None,
