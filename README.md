@@ -16,11 +16,15 @@
 
 ---
 
-## Repository Summary
+## At A Glance
 
-- **Scope.** How does rollout error accumulate in graph-valued world models over long horizons?
-- **Method.** The benchmark separates topology-induced error, dynamic-edge error, and multi-step rollout amplification.
-- **Contents.** Synthetic graph datasets, baseline models, rollout metrics, ablations, dynamic-edge studies, and figure scripts.
+| Artifact review question | Entry point |
+| --- | --- |
+| Research question | How does rollout error accumulate in graph-valued world models over long horizons? |
+| Core method | The benchmark separates topology-induced error, dynamic-edge error, and multi-step rollout amplification. |
+| Included artifacts | Synthetic graph datasets, baseline models, rollout metrics, ablations, dynamic-edge studies, and figure scripts. |
+| Fast validation | `pytest` |
+| Paper-scale reproduction | P2-P6 graph-generation, baseline, dynamic-edge, scaling, and figure scripts. |
 
 ## Overview
 
