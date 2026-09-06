@@ -310,12 +310,6 @@ class HeteroTrace:
     config: Dict[str, Any] = field(default_factory=dict)
 
 
-# spec §3 plan B 分离演化:
-# - 6 维 continuous (dims 1=quality, 2=cost, 3=latency, 4=confidence, 6=budget, 7=context_usage)
-#   走 tanh dynamics ∈ [-1, 1]
-# - 2 维离散 (dim 0=success_prob ∈ [0,1], dim 5=error_flag ∈ {0,1}) 走 Bernoulli
-# - 耦合: (a) error_flag=1 → quality/confidence 衰减 30% (failure shock);
-#          (b) base_rate 依赖 validator-in + parent-error 状态
 CONTINUOUS_DIMS: List[int] = [1, 2, 3, 4, 6, 7]
 DISCRETE_DIMS: List[int] = [0, 5]
 D_CONT = len(CONTINUOUS_DIMS)
