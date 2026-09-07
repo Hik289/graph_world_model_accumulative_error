@@ -98,10 +98,6 @@ class RGCNHetero(nn.Module):
         # Output projection
         delta = self.out_proj(h)  # (B, N, D)
         X_next = X_t + delta
-        # Constrain success probability and error flag to [0, 1].
-        # Use sigmoid on the predicted sr / error_flag absolute values, not residuals,
-        # to keep them in valid Bernoulli-parameter range.
-        # We sigmoid the FULL X_next[:,:,[0,5]] (model's prediction of probability).
         sp = torch.sigmoid(X_next[..., 0:1])
         ef = torch.sigmoid(X_next[..., 5:6])
         # Re-assemble: dims [0]=sp, [1..4]=tanh-bounded continuous, [5]=ef, [6..7]=continuous
