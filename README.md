@@ -59,8 +59,6 @@ weighting.
 
 ## Rollout Pipeline
 
-![Rollout Pipeline](figures/fig_pipeline.png)
-
 The code supports both rollout regimes studied in the paper:
 
 | Regime | Description |
@@ -182,8 +180,7 @@ graph_world_model_accumulative_error/
 |-- LICENSE
 |-- requirements.txt
 |-- figures/
-|   |-- fig_main.png
-|   `-- fig_pipeline.png
+|   `-- fig_main.png
 |-- scripts/
 |-- tests/
 `-- src/

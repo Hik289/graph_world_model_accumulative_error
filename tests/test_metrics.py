@@ -1,4 +1,3 @@
-"""Metrics 单元测试 (对接 metrics.md §5)."""
 from __future__ import annotations
 
 import math
@@ -25,7 +24,6 @@ def _make_pred(N=10, T=10, D=4, *, perfect=False, seed=0):
     else:
         X_pred = X_true + rng.standard_normal(X_true.shape).astype(np.float32) * 0.1
         A_pred = A_true.copy()
-        # 翻转 5% 边
         mask = rng.random(A_true.shape) < 0.05
         A_pred = np.where(mask, 1 - A_pred, A_pred).astype(np.float32)
         A_pred = ((A_pred + A_pred.T) > 0).astype(np.float32)
@@ -43,17 +41,15 @@ def test_T1_node_mse_zero_when_perfect():
 def test_T2_edge_f1():
     pred = _make_pred(perfect=True)
     assert abs(edge_f1_binary(pred, 4) - 1.0) < 1e-6
-    # 全错
     pred.A_pred = 1.0 - pred.A_true
     np.fill_diagonal(pred.A_pred, 0)
     assert edge_f1_binary(pred, 4) < 0.1
 
 
 def test_T3_geaf_star():
-    """GEAF(star N=10) = sqrt(9) · ‖W‖_2."""
     import networkx as nx
     A = nx.to_numpy_array(nx.star_graph(9)).astype(np.float32)
-    W = np.eye(4, dtype=np.float32) * 2.0  # ‖W‖_2 = 2.0
+    W = np.eye(4, dtype=np.float32) * 2.0
     g = geaf_global(A, [W])
     expected = math.sqrt(9) * 2.0
     assert abs(g - expected) < 1e-3, f"got {g}, expected {expected}"
@@ -89,7 +85,6 @@ def test_T7_sr_bootstrap():
 
 
 def test_T8_correlation_linear():
-    """correlation 在已知线性关系上 ≈ 1.0."""
     import pandas as pd
     stats = pd.DataFrame({"topology": ["a"] * 10, "seed": list(range(10)),
                           "rho": list(range(10))})
@@ -110,7 +105,6 @@ def test_T9_reproducibility():
 def test_growth_slope():
     pred = _make_pred()
     s = growth_slope(pred, H1=2, H2=8)
-    # 仅检查 finite
     assert np.isfinite(s) or s == 0.0
 
 
@@ -121,18 +115,13 @@ def test_geaf_local_kinds():
     deg = geaf_local(A, W, kind="degree")
     pr = geaf_local(A, W, kind="pagerank")
     btw = geaf_local(A, W, kind="betweenness")
-    # hub 节点 (0) 在三种 kind 上应该都是 max
     assert deg.argmax() == 0
     assert pr.argmax() == 0
     assert btw.argmax() == 0
 
 
-# ---------------------------------------------------------------------------
-# B operator patch tests (per analysis/b_operator_patch_planned.md §5)
-# ---------------------------------------------------------------------------
 
 def test_coupled_B_two_layers():
-    """model_W=[W1, W2] returns 2×2 matrix."""
     import networkx as nx
     from src.metrics.geaf import coupled_B_operator
     A = nx.to_numpy_array(nx.complete_graph(10)).astype(np.float32)
@@ -140,7 +129,6 @@ def test_coupled_B_two_layers():
     W2 = np.random.default_rng(1).standard_normal((8, 8)).astype(np.float32)
     B = coupled_B_operator(A, [W1, W2])
     assert B.shape == (2, 2)
-    # L_X = σ · ‖A‖_2 · ‖W1‖·‖W2‖
     s1 = np.linalg.svd(W1, compute_uv=False)[0]
     s2 = np.linalg.svd(W2, compute_uv=False)[0]
     A_norm_2 = np.linalg.norm(A, ord=2)
@@ -149,18 +137,16 @@ def test_coupled_B_two_layers():
 
 
 def test_coupled_B_backward_compat_single_W():
-    """Single ndarray W still works (wrapped into list)."""
     import networkx as nx
     from src.metrics.geaf import coupled_B_operator
     A = nx.to_numpy_array(nx.complete_graph(10)).astype(np.float32)
-    W = np.eye(8, dtype=np.float32) * 2.0  # ‖W‖_2 = 2
+    W = np.eye(8, dtype=np.float32) * 2.0
     B = coupled_B_operator(A, W)
     A_norm_2 = float(np.linalg.norm(A, ord=2))
     assert abs(B[0, 0] - A_norm_2 * 2.0) < 1e-3
 
 
 def test_coupled_B_fixed_edge_block_diag():
-    """dynamic_edge=False → M_X = M_A = 0."""
     from src.metrics.geaf import coupled_B_operator
     A = np.eye(5, dtype=np.float32)
     W = np.eye(8, dtype=np.float32)
@@ -170,7 +156,6 @@ def test_coupled_B_fixed_edge_block_diag():
 
 
 def test_coupled_B_dynamic_edge_nonzero_M():
-    """dynamic_edge=True, Q!=None → M_X, M_A 非零."""
     from src.metrics.geaf import coupled_B_operator
     A = np.eye(5, dtype=np.float32) + np.diag(np.ones(4), k=1)
     A = A + A.T
@@ -185,7 +170,6 @@ def test_coupled_B_dynamic_edge_nonzero_M():
 
 
 def test_rho_B_closed_form_matches_eigvals():
-    """ρ(B) closed form vs numpy eigvals on random 2×2 non-neg matrices."""
     from src.metrics.geaf import rho_B_closed_form, rho_B
     rng = np.random.default_rng(0)
     for _ in range(50):
@@ -196,7 +180,6 @@ def test_rho_B_closed_form_matches_eigvals():
 
 
 def test_theory_constants_keys():
-    """落盘字典完整含 8 个 mandatory keys."""
     import networkx as nx
     from src.metrics.geaf import theory_constants
     A = nx.to_numpy_array(nx.scale_free_graph(10).to_undirected()).astype(np.float32)
@@ -209,7 +192,6 @@ def test_theory_constants_keys():
 
 
 def test_geaf_rho_B_ordering_7_topologies():
-    """Proposition T3.2: ρ(B) ordering matches GEAF_hat ordering across 7 topologies."""
     import networkx as nx
     from src.graph_generators import generate
     from src.metrics.geaf import geaf_global, theory_constants
@@ -221,7 +203,6 @@ def test_geaf_rho_B_ordering_7_topologies():
         tc = theory_constants(g.A_dense, W)
         rho_b_list.append(tc["rho_B"])
         geaf_list.append(tc["GEAF_hat"])
-    # Spearman: 完全单调
     from scipy.stats import spearmanr
     rho_r = spearmanr(rho_b_list, geaf_list)[0]
     assert rho_r >= 0.95, f"Spearman ρ(rho_B, GEAF) = {rho_r}, expected ≥ 0.95"

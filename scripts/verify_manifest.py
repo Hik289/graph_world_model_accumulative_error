@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""verify_manifest.py — round-trip sha256 check for gwmerror data subdirs.
-
-Usage:
-    python scripts/verify_manifest.py <manifest_or_subdir> [...]
-    python scripts/verify_manifest.py --all      # all 5 subdirs under data/
-
-Per-file: re-compute sha256(file) and compare to manifest entry.
-Per-manifest: also re-compute sha256(manifest.json) and emit first-16 fingerprint.
-Exit code 0 iff all match; 1 otherwise.
-"""
 from __future__ import annotations
 
 import argparse
@@ -43,19 +33,16 @@ def sha256_file(path: str, buf_size: int = 1 << 20) -> str:
 
 
 def verify_one(manifest_path: Path) -> Tuple[bool, dict]:
-    """Verify one manifest. Returns (pass, report_dict)."""
     t0 = time.time()
     with open(manifest_path, "r") as f:
         manifest = json.load(f)
     subdir = manifest_path.parent
     files = manifest.get("files", [])
 
-    # Flat list of {path, sha256, ...} entries — path may already include split prefix.
     flat: List[dict] = []
     for e in files:
         if isinstance(e, dict) and "path" in e and "sha256" in e:
             flat.append({**e, "_rel": e["path"]})
-    # Fallback: dict-of-lists layout
     if not flat and isinstance(manifest.get("files"), dict):
         for split_name, entries in manifest["files"].items():
             for e in entries:
@@ -82,7 +69,6 @@ def verify_one(manifest_path: Path) -> Tuple[bool, dict]:
         else:
             n_pass += 1
 
-    # Manifest-of-manifest sha
     with open(manifest_path, "rb") as f:
         mhash = hashlib.sha256(f.read()).hexdigest()
 
@@ -95,7 +81,7 @@ def verify_one(manifest_path: Path) -> Tuple[bool, dict]:
         "manifest_sha256_full": mhash,
         "manifest_sha256_first16": mhash[:16],
         "wall_time_sec": round(time.time() - t0, 2),
-        "failures": failures[:50],  # cap to keep report small
+        "failures": failures[:50],
     }
     return (len(failures) == 0), report
 
@@ -117,7 +103,6 @@ def main() -> int:
         if p.is_dir():
             p = p / "manifest.json"
         elif not p.exists():
-            # try as subdir name
             cand = Path(args.data_root) / t / "manifest.json"
             if cand.exists():
                 p = cand

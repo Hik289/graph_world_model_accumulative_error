@@ -1,4 +1,3 @@
-"""B5 Action-Node GWM (Feng et al. ICML 2025 复现): 显式 action-node concatenation."""
 from __future__ import annotations
 
 from typing import List
@@ -11,10 +10,6 @@ from ._common import WorldModelBase, init_weight
 
 
 class ActionNodeGWM(WorldModelBase):
-    """Action 作为一个"虚拟节点"加入图; 通过 attention 聚合到所有节点.
-
-    简化的 Feng et al. 设计: 把 action embedding 投影到节点空间, 与所有节点做 cross-attn.
-    """
 
     def __init__(self, D: int = 8, D_a: int = 4, hidden: int = 64,
                  n_layers: int = 2, n_heads: int = 4):
@@ -37,8 +32,7 @@ class ActionNodeGWM(WorldModelBase):
                 h = torch.relu(torch.einsum("ij,bjd->bid", A_norm, h2)) + h
             else:
                 h = torch.relu(torch.einsum("bij,bjd->bid", A_norm, h2)) + h
-        # Action node attention: action 作为 key/value, 所有节点作为 query
-        a_h = self.action_proj(a_t).unsqueeze(1)            # (B, 1, hidden)
+        a_h = self.action_proj(a_t).unsqueeze(1)
         h_attn, _ = self.cross_attn(query=h, key=a_h, value=a_h)
         h = self.ln1(h + h_attn)
         return X_t + self.out_proj(h)

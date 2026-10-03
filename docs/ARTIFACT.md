@@ -31,7 +31,6 @@ Main tracked entry points for paper-scale or benchmark-scale runs:
 ## Figure Assets
 
 - `figures/fig_main.png`
-- `figures/fig_pipeline.png`
 
 ## Data And Outputs
 

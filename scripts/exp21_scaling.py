@@ -1,29 +1,3 @@
-"""Exp 21: Scaling N ∈ {20, 50, 100, 200, 500}.
-
-Configuration follows p3_p6_experiment_dataset_matrix.md §2 and
-baseline_dataset_matrix.md.
-- 5 baselines (B2/B3/B4/B5/B6); B1 MLP-WM 仅 N≤50 (per spec)
-- 5 拓扑 (chain, tree, grid, small_world, scale_free); star/complete @ N≥200 drop
-- 5 N values, 3 seeds
-- 60 epoch (而非 P2 的 100, 因 5 N 累积成本大)
-- 落盘 results JSON 含 theory_constants (同 P2 standard)
-
-总 jobs ≈ 5 baselines × (5N - 2 drop) × 3 seeds 折合:
-  N=20/50: 5 topos × 3 seed × 5 baseline = 75 (但 B1 仅 N≤50, 加 B1 × 5 topos × 3 × 2N = 30 = 105)
-  N=100: 5 topos × 3 × 5 baseline = 75
-  N=200: 3 topos (excl star/complete) × 3 × 5 baseline = 45
-  N=500: 3 topos × 3 × 5 baseline = 45
-Total = 105 + 75 + 45 + 45 = 270 jobs
-
-考虑到 N≤50 已在 P2 完成 (chain/tree/grid/sw/sf × 3 seed × 5 baseline = 75), 实际需补:
-  N=20: 5 baseline × 5 topo × 3 = 75 jobs
-  N=100: 5 baseline × 5 topo × 3 = 75
-  N=200: 5 baseline × 3 topo × 3 = 45
-  N=500: 5 baseline × 3 topo × 3 = 45
-Total NEW = 240 jobs
-
-FE rollouts for N ∈ {20, 100, 200, 500} must be generated first.
-"""
 from __future__ import annotations
 
 import argparse
@@ -47,7 +21,7 @@ from src.simulators import rollout
 JST = timezone(timedelta(hours=9))
 
 BASELINES = ["B1_MLP", "B2_GCN", "B3_MPNN", "B4_GPS", "B5_ActionNode", "B6_ErrorAware"]
-TOPOLOGIES_SCALING = ["chain", "tree", "grid", "small_world", "scale_free"]  # drop star, complete
+TOPOLOGIES_SCALING = ["chain", "tree", "grid", "small_world", "scale_free"]
 SEEDS = [1, 2, 3]
 N_VALUES = [20, 50, 100, 200, 500]
 TOP_DEFAULTS = {
@@ -61,10 +35,6 @@ def now_jst() -> str:
 
 
 def gen_rollouts_for_N(data_root: str, N: int, force: bool = False) -> int:
-    """生成 fe_<top>_N{N}_seed{S}_T50.pt 给 5 个 scaling 拓扑 × 3 seed.
-
-    跳过 N=50 (P2 已有). 跳过 fe_ 文件已存在的.
-    """
     if N == 50:
         return 0
     n_done = 0
@@ -81,7 +51,6 @@ def gen_rollouts_for_N(data_root: str, N: int, force: bool = False) -> int:
             train_X, val_X, test_X = [], [], []
             train_a, val_a, test_a = [], [], []
             W_shared = U_shared = None
-            # 缩短 trajectory 数以节省 disk: 30 train + 5 val + 5 test (N=500 时 disk敏感)
             n_train, n_val, n_test = (30, 5, 5) if N >= 200 else (50, 10, 10)
             for split_name, n_traj, start in [("train", n_train, 0),
                                               ("val", n_val, 100),
@@ -114,7 +83,6 @@ def gen_rollouts_for_N(data_root: str, N: int, force: bool = False) -> int:
 
 def worker_fn(gpu_id: int, job_q: "mp.Queue", res_q: "mp.Queue",
               data_root: str, out_dir: str, log_path: str, epochs: int = 60):
-    """单 GPU worker, 调 train_one_baseline.train_one 接口."""
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     sys.path.insert(0, REPO_ROOT)
     from scripts.train_one_baseline import train_one
@@ -132,7 +100,6 @@ def worker_fn(gpu_id: int, job_q: "mp.Queue", res_q: "mp.Queue",
         baseline, top, seed, N = job
         t0 = time.time()
         try:
-            # 修改 out_dir 加 _N{N} 后缀, 避免覆盖 P2 N=50
             sub_out = os.path.join(out_dir, f"N{N}")
             result = train_one(
                 baseline, top, seed,
@@ -168,28 +135,21 @@ def main():
 
     print(f"[{now_jst()}] Exp 21 SCALING 启动; gpus={args.gpu_ids} epochs={args.epochs}")
 
-    # Step 1: 生成 N ∈ {20, 100, 200, 500} 的 FE rollouts
     if not args.skip_data_gen:
         for N in N_VALUES:
             t0 = time.time()
             n_gen = gen_rollouts_for_N(args.data_root, N)
             print(f"  rollouts N={N}: {n_gen} new files in {time.time()-t0:.1f}s")
 
-    # Step 2: 构造 job list
     jobs = []
     for bl in BASELINES:
         for N in N_VALUES:
-            # B1 MLP 仅 N <= 50
             if bl == "B1_MLP" and N > 50:
                 continue
-            # N >= 200: drop star/complete (但 scaling 5 topos 已经 drop)
             topos = TOPOLOGIES_SCALING
             for top in topos:
                 for s in SEEDS:
-                    # P2 已完成 N=50 + 7 topo (含 scaling 5) → skip
                     if N == 50 and bl == "B1_MLP":
-                        # B1 P2 用 N=50, already有, 跳过 (out_dir 不同 path 不会 cover)
-                        # 仍 skip 避免重复
                         continue
                     if args.skip_existing:
                         path = os.path.join(args.out_dir, f"N{N}", top, f"{bl}_seed{s}.json")
@@ -201,7 +161,6 @@ def main():
     with open(args.log_path, "w") as f:
         f.write(f"[{now_jst()}] EXP 21 BATCH START n_jobs={n_total}\n")
 
-    # Step 3: dispatch via mp queues
     job_q: "mp.Queue" = mp.Queue()
     res_q: "mp.Queue" = mp.Queue()
     for j in jobs:

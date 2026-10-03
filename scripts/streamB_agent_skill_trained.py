@@ -1,19 +1,3 @@
-"""Stream B: End-to-end training on agent calling and platform skill graphs.
-
-This replaces the P5 zero-shot evaluation of homogeneous models on
-heterogeneous data.
-
-Spec:
-- 5 baselines (B1 MLP / B2 GCN / B3 MPNN / B4 GPS / B5 ActionNode) + B6 patched + R-GCN-Hetero  
-- Trained 50 epochs × 3 seeds × 2 testbeds = ~36 jobs total
-- Use R-GCN-Hetero implementation (already exists, has edge_type/node_type embeddings)
-- For homogeneous baselines, use edge_type=0 (ignore types) or skip homogeneous on hetero (commonly we use RGCN only)
-
-All variants use the R-GCN-style edge embeddings implemented by
-``RGCNHetero``, with the number of edge types set per testbed.
-
-Outputs: results/agent_skill_trained/{testbed}/{baseline}_seed{S}.json
-"""
 from __future__ import annotations
 
 import argparse
@@ -43,16 +27,13 @@ from scripts._runner_utils import skip_if_done, now_jst
 JST = timezone(timedelta(hours=9))
 CEIL = 1e10
 SEEDS = [1, 2, 3]
-# For Stream B, we use R-GCN-Hetero as the universal model class (per agent_calling_tree spec
-# uses 9 node types, 6 edge types; skill_graph 8/8)
-# 5 "baselines" map to 5 hidden dims / depths / layer-counts to provide minimal architectural variation
 BASELINE_CONFIGS = {
-    "B1_RGCN_small":  {"hidden": 32, "n_layers": 2},   # like B1
-    "B2_RGCN_med":    {"hidden": 64, "n_layers": 2},   # like B2 GCN
-    "B3_RGCN_deep":   {"hidden": 64, "n_layers": 3},   # like B3 MPNN (more layers)
-    "B4_RGCN_wide":   {"hidden": 128, "n_layers": 2},  # like B4 GPS (wider)
-    "B5_RGCN_actn":   {"hidden": 64, "n_layers": 2},   # like B5 ActionNode
-    "B6_RGCN_critical": {"hidden": 64, "n_layers": 2, "use_critical_loss": True},  # B6 with R_critical
+    "B1_RGCN_small":  {"hidden": 32, "n_layers": 2},
+    "B2_RGCN_med":    {"hidden": 64, "n_layers": 2},
+    "B3_RGCN_deep":   {"hidden": 64, "n_layers": 3},
+    "B4_RGCN_wide":   {"hidden": 128, "n_layers": 2},
+    "B5_RGCN_actn":   {"hidden": 64, "n_layers": 2},
+    "B6_RGCN_critical": {"hidden": 64, "n_layers": 2, "use_critical_loss": True},
 }
 
 
@@ -64,14 +45,12 @@ def train_one_hetero(
     n_train: int = 100,
     save_ckpt: bool = True,
 ) -> Dict[str, Any]:
-    """Train R-GCN-based baseline on hetero testbed."""
     t0 = time.time()
     py_seed = seed * 1000 + 7
     np.random.seed(py_seed); torch.manual_seed(py_seed + 1)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(py_seed + 2)
 
-    # Determine node/edge type counts
     if testbed == "agent_calling_tree":
         n_node_types = len(NODE_TYPES); n_edge_types = len(EDGE_TYPES)
     elif testbed == "platform_skill_graph":
@@ -88,7 +67,6 @@ def train_one_hetero(
                        hidden=cfg["hidden"], n_layers=cfg["n_layers"]).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
 
-    # Load training instances
     train_dir = os.path.join(data_root, testbed, "train")
     train_files = sorted(os.listdir(train_dir))[:n_train]
     train_loss_curve = []
@@ -107,21 +85,19 @@ def train_one_hetero(
             edge_type = torch.from_numpy(np.array(inst["edge_type"], dtype=np.int64)).to(device)
             node_types = torch.from_numpy(np.array(inst["node_types"], dtype=np.int64)).to(device)
             T_traj = X_traj.shape[0] - 1
-            # T-batched forward (per speedup pattern from P6)
-            X_in = X_traj[:-1]  # (T, N, D)
+            X_in = X_traj[:-1]
             X_target = X_traj[1:]
             a_in = actions
             X_pred = model.forward_step(X_in, edge_index, edge_type, a_in, node_types=node_types)
             loss = F.mse_loss(X_pred, X_target)
             if use_critical_loss:
-                # R_critical: degree-weighted MSE
                 N_g = X_in.shape[1]
                 A_dense = torch.zeros(N_g, N_g, device=device)
                 for s, d in zip(edge_index[0].tolist(), edge_index[1].tolist()):
                     A_dense[s, d] = 1.0
                 deg = A_dense.sum(dim=1) + 1.0
                 deg = deg / deg.mean()
-                err = (X_pred - X_target).pow(2).mean(dim=-1)  # (T, N)
+                err = (X_pred - X_target).pow(2).mean(dim=-1)
                 loss_critical = (err * deg.unsqueeze(0)).mean()
                 loss = loss + lam_critical * loss_critical
             opt.zero_grad(); loss.backward()
@@ -130,7 +106,6 @@ def train_one_hetero(
             loss_sum += float(loss.item()); nb += 1
         train_loss_curve.append(loss_sum / max(nb, 1))
 
-    # Eval on test split
     test_dir = os.path.join(data_root, testbed, "test")
     test_files = sorted(os.listdir(test_dir))[:50]
     per_inst_metrics = []
@@ -151,17 +126,12 @@ def train_one_hetero(
                                             node_types=node_types)[0].cpu().numpy()
         X_true = X_traj.cpu().numpy()
         N_g = X_true.shape[1]
-        # README §6.14 metrics for agent / §6.25 for skill graph
-        # NodeMSE@10
         H10 = min(10, T_traj)
         nm10 = float(np.mean((X_pred[H10] - X_true[H10]) ** 2))
-        # EdgeF1@10: edge prediction not implemented for RGCN here; mark NaN
-        # SR / FPD
         if testbed == "agent_calling_tree":
             sink = inst.get("oracle_answer_node")
             sr = float(X_pred[T_traj, sink, 0]) if (sink is not None and 0 <= sink < N_g) else float("nan")
             sr_true = float(X_true[T_traj, sink, 0]) if (sink is not None and 0 <= sink < N_g) else float("nan")
-            # FPD from root inject
             A_dense = np.zeros((N_g, N_g), dtype=np.float32)
             for s, d in zip(inst["edge_index"][0].tolist(), inst["edge_index"][1].tolist()):
                 A_dense[s, d] = 1.0
@@ -176,7 +146,7 @@ def train_one_hetero(
                 "cost": cl["cost"], "latency": cl["latency"],
                 "n_executed": cl["n_executed"],
             })
-        else:  # platform_skill_graph
+        else:
             skill_mask = (np.array(inst["node_types"]) == SKILL_NODE_TYPES["skill"])
             skill_sr = float(X_pred[T_traj, skill_mask, 0].mean()) if skill_mask.any() else float("nan")
             skill_sr_true = float(X_true[T_traj, skill_mask, 0].mean()) if skill_mask.any() else float("nan")
@@ -202,7 +172,6 @@ def train_one_hetero(
             })
 
     elapsed = time.time() - t0
-    # Aggregate
     import pandas as pd
     df_inst = pd.DataFrame(per_inst_metrics)
     agg = {}

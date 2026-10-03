@@ -1,4 +1,3 @@
-"""B2 GCN-WM: 2-layer GCN with action injection."""
 from __future__ import annotations
 
 from typing import List
@@ -28,27 +27,23 @@ class GCNWorldModel(WorldModelBase):
 
     def forward_step(self, X_t: torch.Tensor, A_norm: torch.Tensor,
                      a_t: torch.Tensor) -> torch.Tensor:
-        # X_t (B, N, D), A_norm (N, N) or (B, N, N), a_t (B, D_a)
         h = X_t
         for layer in self.gcn_layers:
-            h = layer(h)                                           # (B, N, hidden)
+            h = layer(h)
             if A_norm.dim() == 2:
                 h = torch.einsum("ij,bjd->bid", A_norm, h)
             else:
                 h = torch.einsum("bij,bjd->bid", A_norm, h)
             h = torch.relu(h)
-        # action 广播
-        a_h = self.action_proj(a_t).unsqueeze(1)                  # (B, 1, hidden)
+        a_h = self.action_proj(a_t).unsqueeze(1)
         h = h + a_h
-        out = self.out_proj(h)                                     # (B, N, D)
-        return X_t + out  # residual
+        out = self.out_proj(h)
+        return X_t + out
 
     def gnn_W(self) -> List[np.ndarray]:
-        """每层 GCN 的 Linear weight (D × D / D × hidden / hidden × D)."""
         Ws = []
         for layer in self.gcn_layers:
             W = layer.weight.detach().cpu().numpy().astype(np.float32)
-            # 取 (in, in) 最大方阵子矩阵作 spectral norm 估计
             d = min(W.shape)
             Ws.append(W[:d, :d])
         return Ws

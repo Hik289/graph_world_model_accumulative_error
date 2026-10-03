@@ -1,4 +1,3 @@
-"""Topology generators package."""
 from .base import GraphSample, generate
 from .stats import (
     compute_all,

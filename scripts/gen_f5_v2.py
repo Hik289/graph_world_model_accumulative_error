@@ -1,18 +1,3 @@
-"""F5 v2 — Full H3 bidirectional falsifier.
-
-Left panel:  GEAF_hat per topology (7 topos, same as v1)
-Right panel: AffectedNodes@H=20 per topology, B2_GCN, mean across inject_positions
-             → complete=0.02 (low, uniform), star=0.95 (high, uniform)
-             → "crossing" dissociation: GEAF ordering ≠ AffectedNodes ordering
-
-Data sources:
-  P2 baseline raw          → GEAF_hat per topology
-  Exp 3 main               → AffectedNodes@20 for 6 topos (no complete)
-  Exp 3-complete suppl.    → AffectedNodes@20 for complete (108 rows)
-
-Author: Anonymous
-Date: 2026-05-13 JST
-"""
 
 import os, warnings, shutil
 import numpy as np
@@ -23,7 +8,6 @@ import matplotlib.pyplot as plt
 
 warnings.filterwarnings("ignore")
 
-# ─── Paths ────────────────────────────────────────────────────────────────────
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 P2_RAW = os.path.join(REPO_ROOT, "results", "p2_baselines_raw.csv")
 EXP3_MAIN = os.path.join(REPO_ROOT, "results", "p4", "exp3_node_injection.csv")
@@ -31,7 +15,6 @@ EXP3_COMP = os.path.join(REPO_ROOT, "results", "p4", "exp3_complete_supplemental
 OUT = os.path.join(REPO_ROOT, "results", "figures", "p2")
 os.makedirs(OUT, exist_ok=True)
 
-# ─── Style ────────────────────────────────────────────────────────────────────
 plt.style.use("seaborn-v0_8-paper")
 matplotlib.rcParams.update({
     "font.family":      "Helvetica",
@@ -71,23 +54,19 @@ TOPO_LABELS = {
     "star": "Star",  "complete": "Complete",
 }
 
-# ─── 1. Load GEAF data ────────────────────────────────────────────────────────
 print("[F5-v2] Loading GEAF data ...")
 df_p2   = pd.read_csv(P2_RAW)
 geaf_df = df_p2.groupby("topology")["GEAF_hat"].agg(["mean","std"]).reset_index().set_index("topology")
 for t in TOPO_ORDER:
     print(f"  {t}: GEAF = {geaf_df.loc[t,'mean']:.2f} ± {geaf_df.loc[t,'std']:.2f}")
 
-# ─── 2. Load AffectedNodes data (main + supplemental) ─────────────────────────
 print("\n[F5-v2] Loading Exp 3 AffectedNodes data ...")
 df_main  = pd.read_csv(EXP3_MAIN)
 df_suppl = pd.read_csv(EXP3_COMP)
 
-# Combine
 df_all = pd.concat([df_main, df_suppl], ignore_index=True)
 print(f"  Combined: {len(df_all)} rows, topologies: {sorted(df_all['topology'].unique())}")
 
-# AffectedNodes per topology (B2_GCN only, mean across all inject_positions and seeds)
 df_b2    = df_all[df_all["baseline"] == "B2_GCN"]
 aff_df   = df_b2.groupby("topology")["AffectedNodes@H_mean"].agg(["mean","std"]).reset_index().set_index("topology")
 
@@ -96,7 +75,6 @@ for t in TOPO_ORDER:
     if t in aff_df.index:
         print(f"  {t}: {aff_df.loc[t,'mean']:.4f} ± {aff_df.loc[t,'std']:.4f}")
 
-# ─── 3. Verify H3 bidirectional ───────────────────────────────────────────────
 geaf_complete  = geaf_df.loc["complete","mean"]
 geaf_star      = geaf_df.loc["star",    "mean"]
 aff_star       = aff_df.loc["star",     "mean"]
@@ -110,14 +88,12 @@ print(f"  AffN: star={aff_star:.4f} > complete={aff_complete:.4f}? "
 print(f"  Dissociation ratio (GEAF): {geaf_complete/geaf_star:.1f}×")
 print(f"  Dissociation ratio (AffN): {aff_star/max(aff_complete, 1e-9):.1f}×")
 
-# ─── 4. Render ────────────────────────────────────────────────────────────────
 print("\n[F5-v2] Rendering ...")
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(9.5, 4.0))
 
 x = np.arange(len(TOPO_ORDER))
 cols   = [TOPO_COLORS[t] for t in TOPO_ORDER]
 
-# ── LEFT: GEAF bar ──
 means_l = [geaf_df.loc[t,"mean"] for t in TOPO_ORDER]
 stds_l  = [geaf_df.loc[t,"std"]  for t in TOPO_ORDER]
 
@@ -126,13 +102,11 @@ bars_l = ax_l.bar(x, means_l, 0.6, color=cols, alpha=0.85,
 ax_l.errorbar(x, means_l, yerr=stds_l, fmt="none",
               color="black", capsize=4, linewidth=1.0, zorder=5)
 
-# Bold border for complete and star
 for i, t in enumerate(TOPO_ORDER):
     if t in ("complete", "star"):
         bars_l[i].set_linewidth(2.4)
         bars_l[i].set_edgecolor("#111111")
 
-# Arrows: complete >> star (annotate H3 LHS)
 c_idx = TOPO_ORDER.index("complete")
 s_idx = TOPO_ORDER.index("star")
 ax_l.annotate("", xy=(s_idx, means_l[s_idx] + 5),
@@ -150,7 +124,6 @@ ax_l.set_xticklabels([TOPO_LABELS[t] for t in TOPO_ORDER], fontsize=8)
 ax_l.set_ylabel(r"GEAF$_{\hat{}}$ = $\rho(A)\cdot\prod_\ell\|W_\ell\|_2$ (mean $\pm$ std)", fontsize=8.5)
 ax_l.set_title(r"(a) $\rho(A)$-driven error ceiling: Complete graph worst-case", fontsize=8.5, fontweight="bold")
 
-# ── RIGHT: AffectedNodes per topology (B2_GCN) ──
 means_r = [aff_df.loc[t,"mean"] if t in aff_df.index else 0.0 for t in TOPO_ORDER]
 stds_r  = [aff_df.loc[t,"std"]  if t in aff_df.index else 0.0 for t in TOPO_ORDER]
 
@@ -164,7 +137,6 @@ for i, t in enumerate(TOPO_ORDER):
         bars_r[i].set_linewidth(2.4)
         bars_r[i].set_edgecolor("#111111")
 
-# Dissociation annotation: star high, complete low
 ax_r.annotate(
     f"Star: AffN={aff_star:.2f}\n(all positions ~flat)\n→ topology drives spread",
     xy=(s_idx, aff_star), xytext=(s_idx - 1.5, aff_star - 0.08),
@@ -180,7 +152,6 @@ ax_r.annotate(
     bbox=dict(boxstyle="round,pad=0.2", facecolor="white", alpha=0.88, lw=0.4)
 )
 
-# H3 verdict box
 ax_r.text(0.98, 0.97,
           "✓ Insight 3 (empirical RHS):\nstar AffN " + f"{aff_star/max(aff_complete,1e-9):.0f}" + "× > complete AffN\n"
           "Both position-flat → topology\nstructure, not position, drives spread\n"
@@ -203,17 +174,15 @@ fig.suptitle(
 fig.tight_layout(rect=[0, 0, 1, 0.94])
 
 for fmt in ("png", "pdf"):
-    out_path = os.path.join(OUT, f"f5.{fmt}")       # promote: overwrite v1
+    out_path = os.path.join(OUT, f"f5.{fmt}")
     fig.savefig(out_path, dpi=200)
     print(f"  Saved: {out_path}")
-    # also keep versioned copy
     fig.savefig(os.path.join(OUT, f"f5_v2.{fmt}"), dpi=200)
 plt.close(fig)
 
 shutil.copy(__file__, os.path.join(OUT, "f5_v2_gen_code.py"))
 print("  Code backup saved.")
 
-# ─── 5. Caption ───────────────────────────────────────────────────────────────
 geaf_ratio = geaf_complete / geaf_star
 aff_ratio  = aff_star / max(aff_complete, 1e-9)
 aff_chain  = aff_df.loc["chain","mean"] if "chain" in aff_df.index else 0.0

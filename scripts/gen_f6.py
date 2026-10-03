@@ -1,16 +1,3 @@
-"""F6 — H7 redemption test and B5/B6 GEAF spectral comparison.
-
-Two-panel design:
-  Left:  NodeMSE@H pert_vs_clean vs H (log-log), 3 ε values, contractive decay
-  Right: GEAF_hat per topology, B5 vs B6 grouped bars + floor annotation
-
-Data sources:
-  experiments/exp18_multi_axis.csv   (108 rows: B5/B6 × 6 topo × 3 seed × 3 ε)
-  results/p2_baselines_raw.csv       (GEAF per topology per baseline)
-
-Author: Anonymous
-Date: 2026-05-13 JST
-"""
 
 import os, warnings, shutil
 import numpy as np
@@ -21,14 +8,12 @@ import matplotlib.pyplot as plt
 
 warnings.filterwarnings("ignore")
 
-# ─── Paths ────────────────────────────────────────────────────────────────────
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXP18 = os.path.join(REPO_ROOT, "results", "p5_exp18_full", "exp18_multi_axis.csv")
 P2_RAW = os.path.join(REPO_ROOT, "results", "p2_baselines_raw.csv")
 OUT = os.path.join(REPO_ROOT, "results", "figures", "p2")
 os.makedirs(OUT, exist_ok=True)
 
-# ─── Style ────────────────────────────────────────────────────────────────────
 plt.style.use("seaborn-v0_8-paper")
 matplotlib.rcParams.update({
     "font.family":      "Helvetica",
@@ -56,9 +41,9 @@ matplotlib.rcParams.update({
 })
 
 EPS_COLORS = {
-    0.001: "#56B4E9",   # light blue
-    0.01:  "#E69F00",   # orange
-    0.1:   "#D55E00",   # vermillion
+    0.001: "#56B4E9",
+    0.01:  "#E69F00",
+    0.1:   "#D55E00",
 }
 EPS_LABELS = {
     0.001: r"$\varepsilon=0.001$",
@@ -67,8 +52,8 @@ EPS_LABELS = {
 }
 
 BL_COLORS = {
-    "B5_ActionNode": "#009E73",   # bluish-green
-    "B6_ErrorAware": "#CC79A7",   # reddish-purple
+    "B5_ActionNode": "#009E73",
+    "B6_ErrorAware": "#CC79A7",
 }
 BL_LABELS = {
     "B5_ActionNode": "B5 ActionNode",
@@ -85,19 +70,17 @@ TOPO_LABELS  = {
 H_VALS = [1, 2, 4, 8, 16, 32, 64, 128]
 EPS_VALS = [0.001, 0.01, 0.1]
 
-# ─── Load data ────────────────────────────────────────────────────────────────
 print("[F6] Loading data ...")
 df_exp18 = pd.read_csv(EXP18)
 df_p2    = pd.read_csv(P2_RAW)
-EPS_KEY  = "eps"  # column name in exp18
+EPS_KEY  = "eps"
 
 print(f"  Exp18 shape: {df_exp18.shape}")
 print(f"  eps values: {sorted(df_exp18[EPS_KEY].unique())}")
 print(f"  baselines: {sorted(df_exp18['baseline'].unique())}")
 
-# ─── LEFT PANEL: pert_vs_clean decay ─────────────────────────────────────────
 print("[F6] Computing pert_vs_clean per (eps, H) ...")
-EPS_CLIP = 1e-20  # floor clip for log scale
+EPS_CLIP = 1e-20
 
 decay = {}
 for eps in EPS_VALS:
@@ -111,13 +94,11 @@ for eps in EPS_VALS:
     decay[eps] = {"mean": means, "std": stds}
     print(f"  eps={eps}: H1={means[0]:.2e}  H16={means[4]:.2e}  H128={means[-1]:.2e}")
 
-# B5 vs B6 floors at H=128
 b5_floor = df_exp18[df_exp18["baseline"]=="B5_ActionNode"]["NodeMSE@128_pert_vs_clean"].mean()
 b6_floor = df_exp18[df_exp18["baseline"]=="B6_ErrorAware"]["NodeMSE@128_pert_vs_clean"].mean()
 floor_ratio = b5_floor / max(b6_floor, 1e-20)
 print(f"  B5 floor@H128: {b5_floor:.3e}, B6 floor@H128: {b6_floor:.3e}, ratio: {floor_ratio:.1f}×")
 
-# ─── RIGHT PANEL: GEAF per (topology, baseline) ───────────────────────────────
 print("[F6] Computing GEAF per (topology, baseline) ...")
 df_geaf = df_p2[df_p2["topology"].isin(TOPO_ORDER_6)]
 geaf = df_geaf.groupby(["baseline","topology"])["GEAF_hat"].agg(["mean","std"]).reset_index()
@@ -125,13 +106,9 @@ for bl in BL_ORDER:
     sub = geaf[geaf["baseline"]==bl]
     print(f"  {bl}: " + "  ".join(f"{TOPO_LABELS[t]}={sub[sub['topology']==t]['mean'].values[0]:.1f}" for t in TOPO_ORDER_6))
 
-# ─── Render ───────────────────────────────────────────────────────────────────
 print("[F6] Rendering ...")
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(10.0, 4.0))
 
-# ────────────────────────────────────────────────────────────────────────────
-# LEFT PANEL: Log-log decay plot
-# ────────────────────────────────────────────────────────────────────────────
 for eps in EPS_VALS:
     col  = EPS_COLORS[eps]
     lbl  = EPS_LABELS[eps]
@@ -154,14 +131,12 @@ ax_l.set_title(r"(a) H7 Redemption: Contractive decay $\propto\varepsilon^2$ abs
 ax_l.set_xticks([1, 2, 4, 8, 16, 32, 64, 128])
 ax_l.set_xticklabels(["1","2","4","8","16","32","64","128"])
 
-# ε² slope reference line (at H=1 anchor eps=0.1)
 h_ref = np.array([1, 128])
 ref_start = decay[0.1]["mean"][0] * 1.2
-slope = -2.0  # contractive decay steeper than ε² in H; ref line shows ε² scale
+slope = -2.0
 ref_line = ref_start * (h_ref / h_ref[0]) ** slope
 ax_l.plot(h_ref, ref_line, color="gray", lw=1.0, ls=":", alpha=0.6, zorder=1, label="slope ∝ H⁻²")
 
-# Floor annotation
 ax_l.axhline(b5_floor, color=BL_COLORS["B5_ActionNode"], lw=0.9, ls="--",
              alpha=0.65, zorder=3)
 ax_l.axhline(b6_floor, color=BL_COLORS["B6_ErrorAware"], lw=0.9, ls="--",
@@ -173,7 +148,6 @@ ax_l.text(1.4, b6_floor * 0.35,
           f"B6 floor: {b6_floor:.1e}",
           color=BL_COLORS["B6_ErrorAware"], fontsize=6.5, va="top")
 
-# ε² scaling annotation at H=1
 ax_l.text(1.1, decay[0.001]["mean"][0] * 0.5,
           r"$\varepsilon^2$ scaling at $H=1$",
           fontsize=6.5, color="#333333", rotation=0,
@@ -182,9 +156,6 @@ ax_l.text(1.1, decay[0.001]["mean"][0] * 0.5,
 ax_l.legend(loc="lower left", fontsize=7.5, ncol=1,
             title="Perturbation size", title_fontsize=7.0)
 
-# ────────────────────────────────────────────────────────────────────────────
-# RIGHT PANEL: GEAF grouped bar B5 vs B6
-# ────────────────────────────────────────────────────────────────────────────
 n_topos = len(TOPO_ORDER_6)
 bw = 0.35
 offsets = [-bw/2, bw/2]
@@ -207,7 +178,6 @@ ax_r.set_ylabel(r"GEAF$_{\hat{}}$ = $\rho(A)\cdot\prod_\ell\|W_\ell\|_2$ (mean $
 ax_r.set_title(r"(b) GEAF$_{\hat{}}$: B6 spectral regularization reduces error ceiling ~10×",
                fontsize=8.5, fontweight="bold")
 
-# Summary annotation
 b5_geaf_mean = geaf[geaf["baseline"]=="B5_ActionNode"]["mean"].mean()
 b6_geaf_mean = geaf[geaf["baseline"]=="B6_ErrorAware"]["mean"].mean()
 geaf_fold = b5_geaf_mean / max(b6_geaf_mean, 1e-9)
@@ -224,7 +194,6 @@ ax_r.text(0.98, 0.97,
 
 ax_r.legend(loc="upper left", fontsize=8, title="Baseline", title_fontsize=7.5)
 
-# ─── Overall layout ───────────────────────────────────────────────────────────
 fig.suptitle(
     "F6: H7 Redemption — Contractive Decay (Exp 18) + B5/B6 GEAF Comparison (P2)",
     fontsize=10, fontweight="bold"
@@ -240,12 +209,10 @@ plt.close(fig)
 shutil.copy(__file__, os.path.join(OUT, "f6_gen_code.py"))
 print("  Code backup saved.")
 
-# ─── Caption ─────────────────────────────────────────────────────────────────
-# Pre-compute values for caption
 _b5_f = b5_floor
 _b6_f = b6_floor
 _fr   = floor_ratio
-_eps_h1_ratio = decay[0.1]["mean"][0] / decay[0.01]["mean"][0]  # should be ~100
+_eps_h1_ratio = decay[0.1]["mean"][0] / decay[0.01]["mean"][0]
 
 caption = (
     r"F6. H7 redemption test and B5/B6 spectral comparison. "

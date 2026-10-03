@@ -1,4 +1,3 @@
-"""Simulators package."""
 from .dynamic import SimulatorTrace, rollout
 from .agent_calling_tree import (
     HeteroGraphSample, HeteroTrace, NODE_TYPES, EDGE_TYPES, ACTIONS,

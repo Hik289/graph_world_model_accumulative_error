@@ -1,12 +1,3 @@
-"""Generate the P2 paper figures.
-
-VIZ_P2_F1_F2a_F2b_F3_F4_A1
-Generates: F1, F2a, F2b, F3, F4, A1
-Output: results/figures/p2/
-
-Author: Anonymous
-Date: 2026-05-13 JST
-"""
 
 import json, os, warnings
 import numpy as np
@@ -19,9 +10,6 @@ from scipy import stats
 
 warnings.filterwarnings("ignore")
 
-# ──────────────────────────────────────────────
-# 0. Global Style
-# ──────────────────────────────────────────────
 plt.style.use("seaborn-v0_8-paper")
 matplotlib.rcParams.update({
     "font.family": "Helvetica",
@@ -49,16 +37,14 @@ matplotlib.rcParams.update({
     "ps.fonttype": 42,
 })
 
-# Okabe-Ito colorblind-safe palette (8 colors, 7 used for 7 topologies)
-# Verified distinguishable under deuteranopia, protanopia, tritanopia
 TOPO_COLORS = {
-    "chain":       "#56B4E9",  # sky blue
-    "tree":        "#009E73",  # bluish green
-    "grid":        "#F0E442",  # yellow
-    "small_world": "#E69F00",  # orange
-    "scale_free":  "#D55E00",  # vermillion
-    "star":        "#CC79A7",  # reddish purple
-    "complete":    "#0072B2",  # blue
+    "chain":       "#56B4E9",
+    "tree":        "#009E73",
+    "grid":        "#F0E442",
+    "small_world": "#E69F00",
+    "scale_free":  "#D55E00",
+    "star":        "#CC79A7",
+    "complete":    "#0072B2",
 }
 TOPO_ORDER = ["chain", "tree", "grid", "small_world", "scale_free", "star", "complete"]
 TOPO_LABELS = {
@@ -71,14 +57,13 @@ TOPO_LABELS = {
     "complete": "Complete",
 }
 
-# Okabe-Ito palette for baselines — max CVD separation
 BASELINE_COLORS = {
-    "B1_MLP":       "#BBBBBB",  # gray
-    "B2_GCN":       "#0072B2",  # blue
-    "B3_MPNN":      "#D55E00",  # vermillion
-    "B4_GPS":       "#E69F00",  # orange
-    "B5_ActionNode":"#009E73",  # bluish-green
-    "B6_ErrorAware":"#CC79A7",  # reddish-purple
+    "B1_MLP":       "#BBBBBB",
+    "B2_GCN":       "#0072B2",
+    "B3_MPNN":      "#D55E00",
+    "B4_GPS":       "#E69F00",
+    "B5_ActionNode":"#009E73",
+    "B6_ErrorAware":"#CC79A7",
 }
 BASELINE_MARKERS = {
     "B1_MLP": "s",
@@ -104,20 +89,13 @@ os.makedirs(OUT, exist_ok=True)
 RAW_CSV = os.path.join(REPO_ROOT, "results", "p2_baselines_raw.csv")
 PRUN_BASE = os.path.join(REPO_ROOT, "results", "p2_baselines")
 
-# ──────────────────────────────────────────────
-# Helper: load raw CSV
-# ──────────────────────────────────────────────
 def load_raw():
     df = pd.read_csv(RAW_CSV)
-    # Coerce numeric columns
     for col in df.columns:
         if col not in ("baseline", "topology", "status"):
             df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
 
-# ──────────────────────────────────────────────
-# Helper: load per-run JSONs for a topology
-# ──────────────────────────────────────────────
 def load_topo_jsons(topology):
     path = os.path.join(PRUN_BASE, topology)
     results = []
@@ -126,7 +104,6 @@ def load_topo_jsons(topology):
             continue
         with open(os.path.join(path, fname)) as fh:
             d = json.load(fh)
-        # Parse baseline and seed from filename: B2_GCN_seed1.json
         parts = fname.replace(".json", "").rsplit("_seed", 1)
         baseline = parts[0]
         seed = int(parts[1]) if len(parts) > 1 else None
@@ -137,14 +114,7 @@ def load_topo_jsons(topology):
     return results
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# F1 — ρ(A) vs ρ(Ã_norm) paired bar plot (7 topologies)
-# ══════════════════════════════════════════════════════════════════════════════
 def make_f1():
-    """
-    F1: Paired bar showing that dynamics operator ρ(Ã_norm)≡1 across all topologies,
-    while error-operator factor ρ(A) spans 25×. Supports Insight 2.
-    """
     print("[F1] Collecting ρ(A) and ρ(Ã_norm) from per-run JSONs ...")
     topo_data = {t: {"rho_A": [], "rho_A_norm": []} for t in TOPO_ORDER}
     for topo in TOPO_ORDER:
@@ -158,7 +128,6 @@ def make_f1():
             if rn is not None:
                 topo_data[topo]["rho_A_norm"].append(rn)
 
-    # Compute means (rho_A_norm should be constant ~1 per topology)
     rho_A_means = [np.mean(topo_data[t]["rho_A"]) for t in TOPO_ORDER]
     rho_A_stds  = [np.std(topo_data[t]["rho_A"]) for t in TOPO_ORDER]
     rho_An_means = [np.mean(topo_data[t]["rho_A_norm"]) for t in TOPO_ORDER]
@@ -168,7 +137,6 @@ def make_f1():
     x = np.arange(len(TOPO_ORDER))
     w = 0.35
 
-    # Left bars: ρ(A) — log scale on right y-axis via secondary
     ax1.bar(x - w/2, rho_A_means, w,
             color="#648FFF", alpha=0.85, label=r"$\rho(A)$  [error operator factor]",
             yerr=rho_A_stds, capsize=3, error_kw={"elinewidth": 1.2, "ecolor": "#333333"})
@@ -178,7 +146,6 @@ def make_f1():
     ax1.tick_params(axis="y", labelcolor="#648FFF")
     ax1.set_ylim(0.5, 400)
 
-    # Right axis: ρ(Ã_norm) — linear, should be ≈1 everywhere
     ax2 = ax1.twinx()
     ax2.bar(x + w/2, rho_An_means, w,
             color="#BBBBBB", alpha=0.8, label=r"$\rho(\tilde{A}_\mathrm{norm})$  [dynamics operator]")
@@ -186,17 +153,14 @@ def make_f1():
     ax2.set_ylabel(r"$\rho(\tilde{A}_\mathrm{norm})$  (linear)", color="#555555", fontsize=10)
     ax2.tick_params(axis="y", labelcolor="#555555")
 
-    # Horizontal line at 1
     ax2.axhline(1.0, color="#777777", linewidth=1.2, linestyle=":", alpha=0.8)
     ax2.text(len(TOPO_ORDER) - 0.2, 1.05, "uniform = 1", color="#555555",
              fontsize=7.5, ha="right", style="italic")
 
-    # Annotation on complete bar
     complete_idx = TOPO_ORDER.index("complete")
     ax1.annotate("", xy=(complete_idx - w/2, rho_A_means[complete_idx]),
                  xytext=(complete_idx - w/2, rho_A_means[complete_idx] * 1.5),
                  arrowprops=dict(arrowstyle="->", color="#333333", lw=1.2))
-    # Annotation: show ρ(A) absolute value AND ratio vs chain for consistency with abstract "25×"
     rho_chain_val = rho_A_means[TOPO_ORDER.index("chain")]
     rho_comp_val  = rho_A_means[complete_idx]
     span_ratio = rho_comp_val / rho_chain_val
@@ -208,7 +172,6 @@ def make_f1():
     ax1.set_xticklabels([TOPO_LABELS[t] for t in TOPO_ORDER], rotation=22, ha="right", fontsize=8)
     ax1.set_xlabel("Graph Topology", fontsize=10)
 
-    # Combined legend
     h1 = mpatches.Patch(color="#648FFF", alpha=0.85, label=r"$\rho(A)$ [error operator factor]")
     h2 = mpatches.Patch(color="#BBBBBB", alpha=0.8, label=r"$\rho(\tilde{A}_\mathrm{norm})$ [dynamics operator]")
     ax1.legend(handles=[h1, h2], loc="upper left", fontsize=8, framealpha=0.9)
@@ -220,7 +183,6 @@ def make_f1():
     plt.close(fig)
     print("  [F1] Saved f1.png + f1.pdf")
 
-    # Caption
     caption = (
         "F1. The dynamics operator $\\tilde{A}_{\\rm norm} = D^{-1/2}(A+I)D^{-1/2}$ "
         "has a uniform spectral radius of $\\approx 1$ across all seven synthetic topologies "
@@ -240,29 +202,17 @@ def make_f1():
     print("  [F1] Caption saved.")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# F2a — NodeMSE@32 vs GEAF scatter (strict H1 pre-reg, n=105, diverged capped)
-# ══════════════════════════════════════════════════════════════════════════════
 def make_f2a():
-    """
-    F2a: Primary H1 test. B2-B6 (n=105, excl. B1_MLP which has no edge prediction).
-    Shows diverged runs capped at ceiling. Pearson r expected to fail (H1 strict fails).
-    n=105 (B2-B6 × 7 topos × 3 seeds), diverged ceiling applied.
-    """
     print("[F2a] Building NodeMSE@32 vs GEAF scatter ...")
     df = load_raw()
-    # Exclude B1_MLP (no graph structure / edge prediction — not a GWM baseline)
     df_gnn = df[df["baseline"] != "B1_MLP"].copy()
 
-    # Define diverged ceiling: NodeMSE@32 > 1e3 → treat as diverged
     CEILING = 1e3
     df_gnn["diverged"] = df_gnn["status"] == "diverged"
-    # Also cap extreme values
     df_gnn["NodeMSE_32_plot"] = df_gnn["NodeMSE@32"].copy()
     df_gnn.loc[df_gnn["diverged"], "NodeMSE_32_plot"] = CEILING
     df_gnn.loc[df_gnn["NodeMSE_32_plot"] > CEILING, "NodeMSE_32_plot"] = CEILING
 
-    # Compute Pearson r on log scale for non-diverged
     mask_ok = (~df_gnn["diverged"]) & (df_gnn["GEAF_hat"] > 0) & (df_gnn["NodeMSE@32"] > 0)
     ok = df_gnn[mask_ok]
     r, pval = stats.pearsonr(np.log10(ok["GEAF_hat"]), np.log10(ok["NodeMSE@32"]))
@@ -284,20 +234,17 @@ def make_f2a():
                        s=50, alpha=0.9, edgecolors="red", linewidths=1.2,
                        zorder=4)
 
-    # Ceiling annotation — place at right edge to avoid legend overlap
     ax.axhline(CEILING, color="red", linewidth=1.1, linestyle="--", alpha=0.7)
     ax.text(0.99, 0.66, r"$\leftarrow$ diverged, capped at $10^3$",
             transform=ax.transAxes, ha="right", va="bottom",
             fontsize=7.5, color="red", style="italic")
 
-    # Log-log best fit line (non-diverged)
     x_range = np.logspace(np.log10(ok["GEAF_hat"].min() * 0.9),
                            np.log10(ok["GEAF_hat"].max() * 1.1), 100)
     slope, intercept, _, _, _ = stats.linregress(np.log10(ok["GEAF_hat"]), np.log10(ok["NodeMSE@32"]))
     y_fit = 10**(intercept + slope * np.log10(x_range))
     ax.plot(x_range, y_fit, color="#333333", linewidth=1.3, linestyle="-.", alpha=0.6, zorder=2)
 
-    # Pearson annotation
     pstr = f"$p = {pval:.3f}$" if pval > 0.001 else f"$p = {pval:.2e}$"
     ax.text(0.97, 0.05, f"Pearson $r = {r:.3f}$\n{pstr} (n={len(ok)})",
             transform=ax.transAxes, ha="right", va="bottom",
@@ -309,7 +256,6 @@ def make_f2a():
     ax.set_ylabel(r"NodeMSE@32", fontsize=10)
     ax.set_title("F2a: Pre-registered H1 Test — NodeMSE@32 vs. $\\widehat{\\mathrm{GEAF}}$", fontsize=9, fontweight="bold")
 
-    # Red/orange marker for diverged in legend
     div_patch = mpatches.Patch(facecolor="white", edgecolor="red", linewidth=1.5,
                                 label="Diverged (capped)")
     handles, labels = ax.get_legend_handles_labels()
@@ -321,7 +267,6 @@ def make_f2a():
     plt.close(fig)
     print(f"  [F2a] r={r:.3f} p={pval:.4f} n_ok={len(ok)} n_div={df_gnn['diverged'].sum()}")
 
-    # Caption
     caption = (
         "F2a (Pre-registered H1 primary test). Scatter of NodeMSE@32 versus "
         "$\\widehat{\\mathrm{GEAF}}$ across all 105 graph-baseline-seed tuples "
@@ -340,21 +285,10 @@ def make_f2a():
     print("  [F2a] Caption saved.")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# F2b — GrowthSlope_4_32 vs log GEAF scatter (exploratory, n=95)
-# ══════════════════════════════════════════════════════════════════════════════
 def make_f2b():
-    """
-    F2b: Exploratory H1 mechanism holds. GrowthSlope_4_32 (the temporal slope of
-    log NodeMSE from H=4 to H=32) versus log(GEAF). 
-    Per stat_test_spec §1.1: uses B1-B5 (excl. B6_ErrorAware — spectral reg distorts ∏‖W‖).
-    Pearson r=0.626 p=1.2e-11, Spearman ρ=0.511.
-    """
     print("[F2b] Building GrowthSlope_4_32 vs log GEAF scatter ...")
     df = load_raw()
-    # Per stat_test_spec §1.1: exclude B6_ErrorAware (spectral reg changes GEAF proxy calibration)
     df_b1b5 = df[df["baseline"] != "B6_ErrorAware"].copy()
-    # Only non-diverged ok runs
     df_ok = df_b1b5[df_b1b5["status"] == "ok"].copy()
     df_ok = df_ok[df_ok["GEAF_hat"] > 0].copy()
     df_ok["log_GEAF"] = np.log10(df_ok["GEAF_hat"])
@@ -374,22 +308,18 @@ def make_f2b():
                        color=TOPO_COLORS[topo], marker=BASELINE_MARKERS[bl],
                        s=30, alpha=0.78, zorder=3)
 
-    # OLS fit line
     m, b, _, _, _ = stats.linregress(df_ok["log_GEAF"], df_ok["GrowthSlope_4_32"])
     x_fit = np.linspace(df_ok["log_GEAF"].min() - 0.2, df_ok["log_GEAF"].max() + 0.2, 200)
     ax.plot(x_fit, m * x_fit + b, color="#333333", linewidth=1.8,
             linestyle="-", alpha=0.7, label=f"OLS fit ($r={r:.3f}$)", zorder=2)
 
-    # Stat annotation
     pstr = f"$p = {pval:.2e}$"
     ax.text(0.97, 0.07,
             f"Pearson $r = {r:.3f}$\n{pstr}\nSpearman $\\rho = {sr:.3f}$\n$n = {len(df_ok)}$",
             transform=ax.transAxes, ha="right", va="bottom",
             fontsize=8, bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.9))
 
-    # Topology legend patches
     topo_handles = [mpatches.Patch(color=TOPO_COLORS[t], label=TOPO_LABELS[t]) for t in TOPO_ORDER]
-    # Baseline marker legend (small scatter artists) — B1-B5 per stat_test_spec
     bl_handles = [plt.scatter([], [], color="gray", marker=BASELINE_MARKERS[bl],
                               s=25, label=BASELINE_LABELS[bl])
                   for bl in ["B1_MLP", "B2_GCN", "B3_MPNN", "B4_GPS", "B5_ActionNode"]]
@@ -398,7 +328,6 @@ def make_f2b():
                      fontsize=7, title_fontsize=8, ncol=1, framealpha=0.9,
                      bbox_to_anchor=(0, 1))
     ax.add_artist(leg1)
-    # Place baseline legend at lower left (stats box is at lower right)
     ax.legend(handles=bl_handles, title="Baseline (B6 excl.)", loc="lower left",
               fontsize=7, title_fontsize=8, ncol=1, framealpha=0.9,
               bbox_to_anchor=(0, 0))
@@ -436,20 +365,10 @@ def make_f2b():
     print("  [F2b] Caption saved.")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# F3 — B operator 4-entry heatmap
-# ══════════════════════════════════════════════════════════════════════════════
 def make_f3():
-    """
-    F3: 2×2 panel of heatmaps. Each panel: Y=baseline (5 GNN), X=topology (7).
-    Cell = log10 of mean(entry) across 3 seeds.
-    Entries: L_X, L_A, M_X, M_A.
-    Note: FE baselines (B1-B5) have L_A=M_X=0 by construction.
-    """
     print("[F3] Building B-operator heatmap ...")
     df = load_raw()
 
-    # Use all baselines for completeness, mean across seeds
     entries = ["L_X", "L_A", "M_X", "M_A"]
     titles_entry = {
         "L_X": r"$L_X$ (node→node)",
@@ -458,10 +377,8 @@ def make_f3():
         "M_A": r"$M_A$ (edge→edge)",
     }
 
-    # Baselines to show (all 6)
     baselines_show = ["B1_MLP", "B2_GCN", "B3_MPNN", "B4_GPS", "B5_ActionNode", "B6_ErrorAware"]
 
-    # Build mean matrices per entry
     matrices = {}
     for entry in entries:
         mat = np.zeros((len(baselines_show), len(TOPO_ORDER)))
@@ -475,7 +392,6 @@ def make_f3():
                     mat[i, j] = 0.0
         matrices[entry] = mat
 
-    # Log-scale the data (add small epsilon for zeros)
     EPS = 1e-8
     log_matrices = {e: np.log10(matrices[e] + EPS) for e in entries}
 
@@ -485,7 +401,6 @@ def make_f3():
     for ax, entry in zip(axes_flat, entries):
         mat_log = log_matrices[entry]
         mat_raw = matrices[entry]
-        # Detect if panel is all-zero (M_X, M_A in P2 fixed-edge regime)
         is_all_zero = mat_raw.max() < 1e-9
         if is_all_zero:
             ax.set_facecolor("#F8F8F8")
@@ -494,12 +409,10 @@ def make_f3():
                     fontsize=10, color="#666666", style="italic",
                     bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.9))
         else:
-            # Colormap: Blues for L_X, Oranges for L_A
             cmap = "Blues" if entry == "L_X" else "Oranges"
             im = ax.imshow(mat_log, aspect="auto", cmap=cmap, interpolation="nearest")
             plt.colorbar(im, ax=ax, label=r"$\log_{10}$ value", shrink=0.8, pad=0.02)
 
-        # Skip cell annotations for all-zero panels
         if is_all_zero:
             ax.set_xticks(range(len(TOPO_ORDER)))
             ax.set_xticklabels([TOPO_LABELS[t] for t in TOPO_ORDER], rotation=30, ha="right", fontsize=7)
@@ -511,20 +424,17 @@ def make_f3():
             ax.get_yticklabels()[b6_idx].set_fontstyle("italic")
             continue
 
-        # Text annotations in cells
         thresh = (mat_log.max() + mat_log.min()) / 2
         for i in range(len(baselines_show)):
             for j in range(len(TOPO_ORDER)):
                 val = matrices[entry][i, j]
-                # Check if this cell is diverged (no ok runs existed)
                 bl, topo = baselines_show[i], TOPO_ORDER[j]
                 sub_check = df[(df["baseline"] == bl) & (df["topology"] == topo)]
                 ok_check = sub_check[sub_check["status"] == "ok"]
                 has_data = len(ok_check) > 0
                 if not has_data:
                     txt = "div"
-                    col = "#CC0000"  # bright red
-                    # White background patch behind text for max contrast
+                    col = "#CC0000"
                     ax.add_patch(plt.Rectangle((j-0.48, i-0.38), 0.96, 0.76,
                                   facecolor="white", edgecolor="#CC0000",
                                   linewidth=0.8, zorder=3))
@@ -546,7 +456,6 @@ def make_f3():
         ax.set_yticklabels([BASELINE_LABELS[bl] for bl in baselines_show], fontsize=7)
         ax.set_title(titles_entry[entry], fontsize=9.5, fontweight="bold")
 
-        # Mark B6_ErrorAware row with bold black (avoid green-on-white accessibility issue)
         b6_idx = baselines_show.index("B6_ErrorAware")
         ax.get_yticklabels()[b6_idx].set_color("#000000")
         ax.get_yticklabels()[b6_idx].set_fontweight("bold")
@@ -584,24 +493,13 @@ def make_f3():
     print("  [F3] Caption saved.")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# F4 — B2 vs B6 long-rollout NodeMSE curves (scale_free + star, 3 seeds)
-# ══════════════════════════════════════════════════════════════════════════════
 def make_f4():
-    """
-    F4: 2-panel figure.
-    Left: scale_free topology. Right: star topology.
-    Each panel: B2 GCN vs B6 ErrorAware, mean ± std band over 3 seeds.
-    Horizons: 1, 2, 4, 8, 16, 32.
-    """
     print("[F4] Building B2 vs B6 rollout curves ...")
     HORIZONS = [1, 2, 4, 8, 16, 32]
     METRIC_KEYS = [f"NodeMSE@{h}" for h in HORIZONS]
     TOPOS = ["scale_free", "star"]
     COMPARE_BL = ["B2_GCN", "B6_ErrorAware"]
 
-    # Collect data
-    # data[topo][bl] = list of (mean_per_h, std_per_h) across seeds
     all_data = {}
     for topo in TOPOS:
         all_data[topo] = {}
@@ -621,24 +519,21 @@ def make_f4():
                 all_data[topo][bl]["per_seed_means"].append(means_h)
                 all_data[topo][bl]["status"].append(rec.get("_baseline", ""))
 
-    # Compute mean ± std across seeds for each horizon
     fig, axes = plt.subplots(1, 2, figsize=(7.5, 3.2))
 
     bl_styles = {
-        "B2_GCN": {"color": "#0072B2", "linestyle": "-",   # blue (Okabe-Ito)
+        "B2_GCN": {"color": "#0072B2", "linestyle": "-",
                    "marker": "o", "label": "B2 GCN"},
-        "B6_ErrorAware": {"color": "#D55E00", "linestyle": "--",  # vermillion (Okabe-Ito) — avoids blue-green
+        "B6_ErrorAware": {"color": "#D55E00", "linestyle": "--",
                           "marker": "s", "label": "B6 Error-Aware"},
     }
 
     for ax, topo in zip(axes, TOPOS):
         for bl in COMPARE_BL:
             per_seed = all_data[topo][bl]["per_seed_means"]
-            # Filter out None values per seed; replace with NaN
             arr = np.array([[v if v is not None else np.nan for v in seed] for seed in per_seed], dtype=float)
 
-            # Cap extreme diverged values for display
-            DISP_CAP = 50.0  # display cap; B2_GCN diverged runs reach >1e10 by H=16
+            DISP_CAP = 50.0
             arr_display = np.clip(arr, None, DISP_CAP)
 
             mean_h = np.nanmean(arr_display, axis=0)
@@ -652,7 +547,6 @@ def make_f4():
             ax.fill_between(HORIZONS, mean_h - std_h, mean_h + std_h,
                             color=sty["color"], alpha=0.15, zorder=2)
 
-            # Annotate if diverged (mean hits cap)
             if mean_h[-1] >= DISP_CAP * 0.95:
                 ax.text(HORIZONS[-1] - 1, mean_h[-1] * 1.05, "div↑",
                         ha="right", va="bottom", fontsize=7.5, color=sty["color"],
@@ -666,7 +560,6 @@ def make_f4():
         ax.legend(loc="upper left", fontsize=8.5, framealpha=0.92,
                   title="Baseline", title_fontsize=8.5)
         ax.set_xlim(0, 34)
-        # Dotted reference at display cap
         ax.axhline(DISP_CAP, color="#AAAAAA", linewidth=0.8, linestyle=":",
                    alpha=0.6, zorder=1)
         ax.text(34, DISP_CAP * 0.72, "cap=50\n(B2 uncapped~10¹⁰ @ H=16)",
@@ -699,20 +592,11 @@ def make_f4():
     print("  [F4] Caption saved.")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# A1 — EDA seed-variance boxplots (7 topologies × ρ(A))
-# ══════════════════════════════════════════════════════════════════════════════
 def make_a1():
-    """
-    A1: Boxplots of degree_variance, betweenness_concentration, pagerank_concentration
-    across 3 seeds per topology. Shows scale_free seed-variance is intrinsic (BA noise).
-    """
     print("[A1] Building EDA seed-variance boxplots ...")
-    # Collect from per-run JSONs (graph_stats section, pooled across all baselines for same topo+seed)
     topo_gs = {t: {"rho_A": [], "degree_variance": [], "betweenness_concentration": [],
                    "pagerank_concentration": []} for t in TOPO_ORDER}
 
-    # Use only one baseline to avoid 6x repetition of same graph stats
     for topo in TOPO_ORDER:
         records = load_topo_jsons(topo)
         seen_seeds = set()
@@ -760,8 +644,7 @@ def make_a1():
         ax.set_ylabel(ylabel, fontsize=9)
         ax.set_title(ylabel, fontsize=9, fontweight="bold")
 
-        # Annotate scale_free's higher spread
-        sf_idx = TOPO_ORDER.index("scale_free") + 1  # 1-indexed for boxplot
+        sf_idx = TOPO_ORDER.index("scale_free") + 1
         ax.annotate("BA randomness\n(expected)", xy=(sf_idx, max(data_per_topo[sf_idx - 1])),
                     xytext=(sf_idx - 1.5, max(data_per_topo[sf_idx - 1]) * 1.05),
                     fontsize=6.5, color="#555555", arrowprops=dict(arrowstyle="->", lw=0.9, color="#555555"))
@@ -798,9 +681,6 @@ def make_a1():
     print("  [A1] Caption saved.")
 
 
-# ──────────────────────────────────────────────
-# MAIN
-# ──────────────────────────────────────────────
 if __name__ == "__main__":
     print("=" * 60)
     print("gwmerror P2 Figure Generation — VIZ_P2_F1_F2a_F2b_F3_F4_A1")

@@ -1,11 +1,3 @@
-"""Generate the F7 and F8 heterogeneous R-GCN baseline figures.
-
-F7: Exp 16 correction policy reduction_pct bar chart (H5 secondary signal)
-F8: R-GCN sigmoid-fixed calibration scatter (Exp 14 + Exp 25 side-by-side)
-
-Author: Anonymous
-Date: 2026-05-13 JST
-"""
 
 import os, warnings, shutil
 import numpy as np
@@ -17,7 +9,6 @@ from scipy import stats
 
 warnings.filterwarnings("ignore")
 
-# ─── Paths ────────────────────────────────────────────────────────────────────
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXP16 = os.path.join(REPO_ROOT, "results", "p6_rgcn_hetero", "exp16_model_correction.csv")
 EXP14 = os.path.join(REPO_ROOT, "results", "p6_rgcn_hetero", "exp14_model_rollout.csv")
@@ -25,7 +16,6 @@ EXP25 = os.path.join(REPO_ROOT, "results", "p6_rgcn_hetero", "exp25_model_rollou
 OUT = os.path.join(REPO_ROOT, "results", "figures", "p6")
 os.makedirs(OUT, exist_ok=True)
 
-# ─── Style ────────────────────────────────────────────────────────────────────
 plt.style.use("seaborn-v0_8-paper")
 matplotlib.rcParams.update({
     "font.family":      "Helvetica",
@@ -65,9 +55,6 @@ POL_LABELS = {
 }
 POL_ORDER = ["oracle", "GEAF_proxy", "degree", "random"]
 
-# ══════════════════════════════════════════════════════════════════════════════
-# F7 — Correction policy reduction_pct
-# ══════════════════════════════════════════════════════════════════════════════
 print("[F7] Loading Exp 16 data ...")
 df16 = pd.read_csv(EXP16)
 agg16 = df16.groupby("policy")["reduction_pct"].agg(["mean","std"]).reset_index().set_index("policy")
@@ -85,7 +72,6 @@ bars7 = ax7.bar(x7, means7, 0.55, color=cols7, alpha=0.87,
 ax7.errorbar(x7, means7, yerr=stds7, fmt="none",
              color="#333333", capsize=5, linewidth=1.2, zorder=5)
 
-# Value annotations above bars
 for i, (m, s) in enumerate(zip(means7, stds7)):
     ax7.text(i, m + s + 0.3, f"{m:.1f}%",
              ha="center", va="bottom", fontsize=8, fontweight="bold",
@@ -99,7 +85,6 @@ ax7.set_title("F7 (§5): R-GCN Correction Policy — Centrality Proxy Matches De
               fontsize=8.5, fontweight="bold")
 ax7.set_ylim(0, max(means7) * 1.30)
 
-# Oracle-vs-GEAF gap annotation
 gap = means7[POL_ORDER.index("oracle")] - means7[POL_ORDER.index("GEAF_proxy")]
 ax7.annotate(
     f"oracle gap: +{gap:.1f}pp",
@@ -121,7 +106,6 @@ for fmt in ("png","pdf"):
 plt.close(fig7)
 shutil.copy(__file__, os.path.join(OUT, "f7_f8_gen_code.py"))
 
-# Caption F7
 _oracle = agg16.loc["oracle","mean"]
 _geaf   = agg16.loc["GEAF_proxy","mean"]
 _rand   = agg16.loc["random","mean"]
@@ -139,9 +123,6 @@ cap7 = (
 )
 with open(os.path.join(OUT,"f7_caption.txt"),"w") as fh: fh.write(cap7)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# F8 — R-GCN calibration scatter: Exp 14 + Exp 25
-# ══════════════════════════════════════════════════════════════════════════════
 print("[F8] Loading Exp 14 + Exp 25 data ...")
 df14 = pd.read_csv(EXP14)
 df25 = pd.read_csv(EXP25)
@@ -166,18 +147,15 @@ for ax, df, xcol, ycol, title_txt, r_val, p_val, mae, col in [
     y_ = df[ycol].values
     ax.scatter(x_, y_, s=18, color=col, alpha=0.55, edgecolors="none", zorder=3)
 
-    # Identity line
     mn_ = min(x_.min(), y_.min()) * 0.97
     mx_ = max(x_.max(), y_.max()) * 1.03
     ax.plot([mn_, mx_], [mn_, mx_], color="gray", lw=1.0, ls="--", alpha=0.7,
             label="$y=x$ (perfect)", zorder=2)
 
-    # Regression line
     m_, b_ = np.polyfit(x_, y_, 1)
     xs_ = np.linspace(mn_, mx_, 100)
     ax.plot(xs_, m_*xs_+b_, color=col, lw=1.4, ls="-", alpha=0.6, zorder=4)
 
-    # Stats annotation
     ax.text(0.05, 0.95,
             f"R-GCN mean: {y_.mean():.3f}\nGT mean: {x_.mean():.3f}\n"
             f"Pearson r={r_val:.3f}\nMAE={mae:.3f}",

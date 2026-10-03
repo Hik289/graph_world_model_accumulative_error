@@ -1,4 +1,3 @@
-"""Tests for the seven topology generators and graph statistics."""
 from __future__ import annotations
 
 import json
@@ -21,7 +20,6 @@ def test_all_connected_default():
         for seed in [1, 2, 3, 4, 5]:
             g = generate(top, N=50, seed=seed)
             A = g.A_dense
-            # connectivity check
             import networkx as nx
             G = nx.from_numpy_array(A)
             assert nx.is_connected(G), f"{top}@seed{seed} not connected"
@@ -47,7 +45,6 @@ def test_rho_star():
 
 
 def test_rho_ordering():
-    """中位数 rho(A) 排序: chain < tree < grid < small_world < scale_free < star < complete."""
     medians = {}
     for top in TOPS:
         rhos = []

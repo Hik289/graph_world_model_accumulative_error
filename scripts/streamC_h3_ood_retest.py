@@ -1,14 +1,3 @@
-"""Stream C: H3 out-of-distribution retest from Amendment §A4.
-
-Experiment specification:
-- Train set: chain ∪ tree (use P2 chain checkpoints as conservative proxy)
-- Test set: scale_free (OOD)
-- Inject 6 positions × δ ∈ {0.1, 0.5, 1.0, 2.0} × H ∈ {1,2,4,8,16,20,32}
-- Zero-shot eval from P2 baseline chain checkpoints (per A4 spec)
-- 6 baselines × 3 seeds × 6 positions × 4 δ × 7 H = 3,024 rows
-
-Output: results/h3_ood_amplitude_sweep.csv
-"""
 from __future__ import annotations
 
 import argparse
@@ -39,15 +28,11 @@ SEEDS = [1, 2, 3]
 POSITIONS = ["random", "leaf", "hub", "bridge", "action", "target"]
 DELTAS = [0.1, 0.5, 1.0, 2.0]
 HORIZONS = [1, 2, 4, 8, 16, 20, 32]
-TRAIN_TOPO = "chain"  # OOD training proxy: chain (low ρ); could also use tree
+TRAIN_TOPO = "chain"
 TEST_TOPO = "scale_free"
 
 
 def load_chain_checkpoint(baseline: str, seed: int, p2_dir: str, dev: torch.device):
-    """Load baseline checkpoint trained on chain (conservative low-ρ training).
-
-    For B6/B2 prefer patched checkpoints if available.
-    """
     if baseline in ("B6_ErrorAware", "B2_GCN"):
         patched_ck = os.path.join(p2_dir.replace("p2_baselines", "p2_baselines_patched"),
                                    "checkpoints", TRAIN_TOPO, f"{baseline}_seed{seed}.pt")
@@ -68,7 +53,6 @@ def load_chain_checkpoint(baseline: str, seed: int, p2_dir: str, dev: torch.devi
         model.load_state_dict(ck["state_dict"])
     except Exception:
         return None
-    # Skip if any NaN weights
     for p in model.parameters():
         if torch.isnan(p).any() or torch.isinf(p).any():
             return None
@@ -117,15 +101,12 @@ def main():
 
     for baseline in BASELINES:
         for seed in SEEDS:
-            # Load model trained on chain (OOD train set proxy)
             model = load_chain_checkpoint(baseline, seed, args.p2_dir, dev)
             if model is None:
                 print(f"  SKIP {baseline} seed{seed} (no chain checkpoint or NaN)")
                 continue
-            # Load scale_free test graph (same outer_seed for consistency)
             g_test = generate(TEST_TOPO, N=N, seed=seed, m=2)
             A_norm_t = torch.from_numpy(g_test.A_norm).float().to(dev)
-            # Load scale_free test trajectories (for clean baseline rollout)
             rollout_path = os.path.join(args.data_root, "synthetic_rollouts",
                                          f"fe_{TEST_TOPO}_N{N}_seed{seed}_T50.pt")
             if not os.path.exists(rollout_path):
@@ -136,7 +117,6 @@ def main():
             test_a = payload["test_actions"]
             T_traj = test_X.shape[1] - 1
 
-            # Clean rollout (no perturbation)
             X_0 = torch.from_numpy(test_X[:, 0]).float().to(dev)
             a_seq = torch.from_numpy(test_a).float().to(dev)
             with torch.no_grad():
@@ -149,13 +129,11 @@ def main():
                 if inj_node is None:
                     continue
                 for delta in DELTAS:
-                    # Inject perturbation at X_0[inj_node, :] += δ
                     X_0_pert = X_0.clone()
                     X_0_pert[:, inj_node, :] += float(delta)
                     with torch.no_grad():
                         X_pred_pert = model.rollout_predict(
                             X_0_pert, A_norm_t, a_seq, T=T_traj).cpu().numpy()
-                    # For each H, compute NodeMSE and AffectedNodes
                     for H in HORIZONS:
                         if H > T_traj:
                             continue

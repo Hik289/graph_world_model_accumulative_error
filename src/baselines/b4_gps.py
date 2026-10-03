@@ -1,4 +1,3 @@
-"""B4 GPS-WM: Graph Transformer (full attention + local MP residual)."""
 from __future__ import annotations
 
 from typing import List
@@ -22,16 +21,13 @@ class GPSBlock(nn.Module):
         self.ln3 = nn.LayerNorm(hidden)
 
     def forward(self, h, A_norm):
-        # global attention
         h_attn, _ = self.attn(h, h, h)
         h = self.ln1(h + h_attn)
-        # local MP (GCN-like)
         if A_norm.dim() == 2:
             h_local = torch.einsum("ij,bjd->bid", A_norm, self.local(h))
         else:
             h_local = torch.einsum("bij,bjd->bid", A_norm, self.local(h))
         h = self.ln2(h + h_local)
-        # FFN
         h = self.ln3(h + self.ff(h))
         return h
 

@@ -1,12 +1,3 @@
-"""P2 baselines 4-GPU parallel scheduler.
-
-Schedules six baselines × seven topologies × three outer seeds across four GPUs.
-逻辑:
-- 4 个 worker (one per GPU); 每 worker pop job 从 queue, 串行训练
-- 每 job 完成自动写 results/p2_baselines/{top}/{baseline}_seed{S}.json
-- 顶层 progress 写到 logs/p2_progress.log
-- 所有完成后写 results/p2_all_baselines_summary.json
-"""
 from __future__ import annotations
 
 import argparse
@@ -34,10 +25,7 @@ def now_jst() -> str:
 
 def worker_fn(gpu_id: int, job_q: "mp.Queue", res_q: "mp.Queue",
               data_root: str, out_dir: str, log_path: str):
-    """单 GPU worker. 持续从 queue 取 job 直到 sentinel (None)."""
-    # 限制本 worker 只能看到一张卡
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-    # Import torch only after selecting the worker's GPU.
     sys.path.insert(0, REPO_ROOT)
     from scripts.train_one_baseline import train_one
     import torch
@@ -55,7 +43,6 @@ def worker_fn(gpu_id: int, job_q: "mp.Queue", res_q: "mp.Queue",
         baseline, top, seed = job
         t0 = time.time()
         try:
-            # 每个 worker 内部只看一张卡, 用 cuda:0
             result = train_one(
                 baseline, top, seed,
                 data_root=data_root, out_dir=out_dir,
@@ -97,12 +84,10 @@ def main():
                         help="若 result JSON 已存在则跳过")
     args = parser.parse_args()
 
-    # 检查 GPU 数
     if args.gpu_ids is None:
         args.gpu_ids = list(range(args.n_gpus))
     print(f"[{now_jst()}] 启动 P2 baseline 训练; gpus={args.gpu_ids}")
 
-    # 构造 job list
     blines = args.filter_baselines or BASELINES
     tops = args.filter_topologies or TOPOLOGIES
     seeds = args.filter_seeds or SEEDS
@@ -110,7 +95,6 @@ def main():
     for bl in blines:
         for top in tops:
             for s in seeds:
-                # skip existing
                 if args.skip_existing:
                     out_path = os.path.join(args.out_dir, top, f"{bl}_seed{s}.json")
                     if os.path.exists(out_path):
@@ -123,7 +107,6 @@ def main():
     with open(args.log_path, "a") as f:
         f.write(f"[{now_jst()}] P2 BATCH START n_jobs={n_total} gpus={args.gpu_ids}\n")
 
-    # mp queues
     job_q: "mp.Queue" = mp.Queue()
     res_q: "mp.Queue" = mp.Queue()
     for j in jobs:
@@ -139,7 +122,6 @@ def main():
         p.start()
         procs.append(p)
 
-    # 收 result
     n_done = 0
     n_ok = n_skipped = n_err = 0
     results_summary = []

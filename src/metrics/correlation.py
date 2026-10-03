@@ -1,4 +1,3 @@
-"""Topology stats × error metrics correlation (Exp 2/11/19)."""
 from __future__ import annotations
 
 from typing import Dict, List
@@ -13,15 +12,6 @@ def correlation_topology_error(
     *, method: str = "pearson",
     join_keys: List[str] = None,
 ) -> pd.DataFrame:
-    """跨 (topology × seed) 计算 stat × error_metric 相关系数 + 95% bootstrap CI.
-
-    Parameters
-    ----------
-    stats_df : 列至少含 'topology', 'seed', + 各 stat 列.
-    errors_df : 列至少含 'topology', 'seed', + 各 error metric 列.
-    method : "pearson" | "spearman".
-    join_keys : merge 键 (默认 ['topology', 'seed']).
-    """
     if join_keys is None:
         join_keys = ["topology", "seed"]
     df = stats_df.merge(errors_df, on=join_keys, how="inner")
@@ -47,7 +37,6 @@ def correlation_topology_error(
                 r, p = stats.spearmanr(xm, ym)
             else:
                 raise ValueError(method)
-            # 95% bootstrap CI on r
             rng = np.random.default_rng(0)
             idx = rng.choice(len(xm), size=(1000, len(xm)), replace=True)
             rs = []

@@ -1,16 +1,3 @@
-"""Stream A: DE-trained baselines with an edge-prediction head.
-
-Runs six topologies (excluding complete) × six baselines × three seeds.
-
-Loss: L_total = L_X (node MSE) + λ_e * BCE(Â, A_true), default λ_e = 1.0
-
-Each run records:
-- NodeMSE@H and EdgeF1@H for H ∈ {1,2,4,8,16,32}
-- theory_constants with L_g (edge Lipschitz, M_X derived)
-- final_train_loss, final_train_loss_node, final_train_loss_edge
-
-Output: results/de_trained/{topo}/{baseline}_seed{S}.json
-"""
 from __future__ import annotations
 
 import argparse
@@ -39,7 +26,7 @@ from scripts._runner_utils import skip_if_done, now_jst
 
 JST = timezone(timedelta(hours=9))
 BASELINES = ["B1_MLP", "B2_GCN", "B3_MPNN", "B4_GPS", "B5_ActionNode", "B6_ErrorAware"]
-TOPOLOGIES = ["chain", "tree", "grid", "small_world", "scale_free", "star"]  # drop complete
+TOPOLOGIES = ["chain", "tree", "grid", "small_world", "scale_free", "star"]
 SEEDS = [1, 2, 3]
 N = 50
 D = 8
@@ -49,7 +36,6 @@ CEIL = 1e10
 
 
 def build_node_model(baseline: str, N_g: int = 50):
-    """Build the node-level world model (without edge head)."""
     cls = BASELINE_REGISTRY[baseline]
     if baseline == "B1_MLP":
         return cls(N=N_g, D=D, D_a=D_a)
@@ -66,23 +52,20 @@ def train_one_de(
     lam_edge: float = 1.0,
     save_ckpt: bool = True,
 ) -> Dict[str, Any]:
-    """Train baseline + edge head on DE rollout data."""
     t0 = time.time()
-    # Seeding
     py_seed = seed * 1000 + 7
     np.random.seed(py_seed)
     torch.manual_seed(py_seed + 1)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(py_seed + 2)
 
-    # Load DE rollouts (default Q_norm=1.0)
     de_path = os.path.join(data_root, "de_synthetic",
                             f"de_{topo}_N{N}_seed{seed}_T32.pt")
     if not os.path.exists(de_path):
         return {"skipped": True, "reason": f"DE file missing: {de_path}"}
     payload = torch.load(de_path, weights_only=False)
-    train_X = payload["train_X"]      # (80, T+1, N, D)
-    train_A = payload["train_A"]      # (80, T+1, N, N)
+    train_X = payload["train_X"]
+    train_A = payload["train_A"]
     train_a = payload["train_actions"]
     val_X = payload["val_X"]
     val_A = payload["val_A"]
@@ -92,28 +75,22 @@ def train_one_de(
     test_a = payload["test_actions"]
     Q_gt = payload.get("Q")
 
-    # Build model
     node_model = build_node_model(baseline)
     model = WorldModelWithEdgeHead(node_model, D=D, hidden=16).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     n_params = sum(p.numel() for p in model.parameters())
 
-    # Construct 1-step pairs (X_t, A_t_normalized, a_t) -> (X_{t+1}, A_{t+1})
     def normalize_A_batch(A: np.ndarray) -> np.ndarray:
-        # A shape (..., N, N). Symmetric normalize with self-loop.
         N_g = A.shape[-1]
         A_self = A + np.eye(N_g, dtype=np.float32)
         d = A_self.sum(axis=-1, keepdims=True)
         d_safe = np.where(d > 0, d, 1.0)
         d_inv_sqrt = 1.0 / np.sqrt(d_safe)
-        # Sym norm: D^-1/2 (A+I) D^-1/2
         A_norm = A_self * d_inv_sqrt * np.swapaxes(d_inv_sqrt, -1, -2)
         return A_norm.astype(np.float32)
 
-    # Flatten to 1-step pairs: (n_traj * T, N, D), with corresponding A
     def make_pairs(X, A, a):
         N_g = X.shape[2]
-        # X_t, X_{t+1}: (n_traj * T, N, D)
         X_in = X[:, :-1].reshape(-1, N_g, D)
         X_target = X[:, 1:].reshape(-1, N_g, D)
         A_in = A[:, :-1].reshape(-1, N_g, N_g)
@@ -123,10 +100,8 @@ def train_one_de(
 
     tr_Xin, tr_Xt, tr_Ain, tr_At, tr_ain = make_pairs(train_X, train_A, train_a)
     va_Xin, va_Xt, va_Ain, va_At, va_ain = make_pairs(val_X, val_A, val_a)
-    # Normalize A
     tr_Anorm = normalize_A_batch(tr_Ain)
     va_Anorm = normalize_A_batch(va_Ain)
-    # To tensors
     tr_Xin_t = torch.from_numpy(tr_Xin).float().to(device)
     tr_Xt_t = torch.from_numpy(tr_Xt).float().to(device)
     tr_Anorm_t = torch.from_numpy(tr_Anorm).float().to(device)
@@ -151,7 +126,6 @@ def train_one_de(
             X_pred, A_pred_logits = model.forward_step(
                 tr_Xin_t[idx], tr_Anorm_t[idx], tr_ain_t[idx])
             loss_node = F.mse_loss(X_pred, tr_Xt_t[idx])
-            # Edge BCE: predict A_{t+1} from X_{t+1}
             loss_edge = F.binary_cross_entropy_with_logits(
                 A_pred_logits, tr_At_t[idx])
             loss = loss_node + lam_edge * loss_edge
@@ -167,7 +141,6 @@ def train_one_de(
             "loss_node": loss_node_sum / max(nb, 1),
             "loss_edge": loss_edge_sum / max(nb, 1),
         })
-        # val
         model.eval()
         with torch.no_grad():
             Xp, Ap = model.forward_step(va_Xin_t, va_Anorm_t, va_ain_t)
@@ -178,11 +151,9 @@ def train_one_de(
         if vl < best_val:
             best_val = vl
 
-    # ---- Eval: rollout on test set (T=32) ----
     model.eval()
     with torch.no_grad():
         X0 = torch.from_numpy(test_X[:, 0]).float().to(device)
-        # Initial A (un-normalized then we normalize inside rollout)
         A0_normed = torch.from_numpy(normalize_A_batch(test_A[:, 0])).float().to(device)
         actions = torch.from_numpy(test_a).float().to(device)
         T_test = test_X.shape[1] - 1
@@ -191,14 +162,12 @@ def train_one_de(
         X_pred_np = X_pred_traj.cpu().numpy().astype(np.float32)
         A_pred_logits_np = A_logits_traj.cpu().numpy() if A_logits_traj is not None else None
 
-    # Metrics per H
     test_X_np = test_X
     test_A_np = test_A
     metrics = {}
     for h in HORIZONS:
         if h > T_test:
             continue
-        # NodeMSE
         per_traj_mse = []
         per_traj_f1 = []
         for i in range(test_X_np.shape[0]):
@@ -206,12 +175,10 @@ def train_one_de(
             nm = float(np.mean(diff ** 2))
             nm = min(nm, CEIL) if math.isfinite(nm) else CEIL
             per_traj_mse.append(nm)
-            # EdgeF1: sigmoid(logits) > 0.5 vs A_true
             if A_pred_logits_np is not None and h <= A_pred_logits_np.shape[1]:
                 A_pred_h = 1.0 / (1.0 + np.exp(-A_pred_logits_np[i, h - 1]))
                 A_pred_h_hard = (A_pred_h > 0.5).astype(np.float32)
                 A_true_h = test_A_np[i, h]
-                # F1
                 tp = float(((A_pred_h_hard == 1) & (A_true_h == 1)).sum())
                 fp = float(((A_pred_h_hard == 1) & (A_true_h == 0)).sum())
                 fn = float(((A_pred_h_hard == 0) & (A_true_h == 1)).sum())
@@ -234,7 +201,6 @@ def train_one_de(
             metrics[f"EdgeF1@{h}"] = float(np.mean(per_traj_f1))
             metrics[f"EdgeF1@{h}_std"] = float(np.std(per_traj_f1))
 
-    # ---- theory_constants with L_g ----
     g = generate(topo, N=N, seed=seed)
     model_W = model.gnn_W()
     if not model_W:
@@ -271,7 +237,6 @@ def train_one_de(
         "theory_constants": tc,
         "graph_stats": compute_all(g),
     }
-    # Save
     out_path = os.path.join(out_dir, topo, f"{baseline}_seed{seed}.json")
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w") as f:
@@ -301,7 +266,6 @@ def worker_fn(gpu_id, job_q, res_q, data_root, out_dir, log_path, epochs):
             res_q.put(("done", gpu_id, None))
             return
         baseline, topo, seed = job
-        # Skip if exists
         out_path = os.path.join(out_dir, topo, f"{baseline}_seed{seed}.json")
         if skip_if_done(out_path):
             res_q.put(("skipped", gpu_id, {"baseline": baseline, "topology": topo,
